@@ -173,7 +173,19 @@ export const isInteractive = (L) =>
 
 function emit(ctx, L, part, sig, strokes, x, y, bbox, intensity, color = L.style.color) {
   const priority = ctx.rt.hover === L.key || ctx.rt.focus === L.key;
-  const item = { key: `${L.key}|${part}`, sig, strokes, x, y, intensity: intensity * ctx.boost, color, priority, abs: null };
+  const item = {
+    key: `${L.key}|${part}`,
+    sig,
+    strokes,
+    x,
+    y,
+    intensity: intensity * ctx.boost,
+    color,
+    priority,
+    scroll: ctx.owner?.state ?? null,
+    abs: null,
+    vis: bbox[3] - bbox[1], // visible height, so the runtime can tell when a clipped item grows
+  };
   const c = ctx.clip;
   if (c) {
     const x0 = x + bbox[0];
@@ -184,6 +196,7 @@ function emit(ctx, L, part, sig, strokes, x, y, bbox, intensity, color = L.style
     if (x0 < c.x || y0 < c.y || x1 > c.x + c.w || y1 > c.y + c.h) {
       item.abs = clipStrokes(strokes, x, y, c);
       if (!item.abs.length) return;
+      item.vis = Math.min(y1, c.y + c.h) - Math.max(y0, c.y);
     }
   }
   ctx.items.push(item);

@@ -1,6 +1,6 @@
 import { VectorDisplay } from '../src/vector-display.js';
 import { PROGRAMS } from './programs.js';
-import { createKnob } from './controls.js';
+import { bindPanel } from './controls.js';
 
 const root = document.documentElement;
 const canvas = document.getElementById('screen');
@@ -17,51 +17,9 @@ try {
 // Handy for poking at it from the console: vd.line(100, 100, 900, 600)
 window.vd = display;
 
-// -- phosphor ---------------------------------------------------------------
+// -- panel ----------------------------------------------------------------
 
-const phosphorButtons = document.querySelectorAll('[data-set-phosphor]');
-function setPhosphor(color) {
-  display.color = color;
-  root.dataset.phosphor = color;
-  phosphorButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.setPhosphor === color)));
-}
-phosphorButtons.forEach((b) => b.addEventListener('click', () => setPhosphor(b.dataset.setPhosphor)));
-
-// -- knobs ------------------------------------------------------------------
-
-const knob = (name, opts) => createKnob(document.querySelector(`[data-knob="${name}"]`), opts);
-knob('intensity', {
-  min: 0.25,
-  max: 2.5,
-  value: display.intensity,
-  log: true,
-  format: (v) => v.toFixed(2),
-  onChange: (v) => (display.intensity = v),
-});
-knob('focus', {
-  min: 0.6,
-  max: 5,
-  value: display.focus,
-  log: true,
-  format: (v) => v.toFixed(2),
-  onChange: (v) => (display.focus = v),
-});
-knob('persistence', {
-  min: 0.02,
-  max: 2.5,
-  value: display.persistence,
-  log: true,
-  format: (v) => (v < 1 ? `${Math.round(v * 1000)}ms` : `${v.toFixed(2)}s`),
-  onChange: (v) => (display.persistence = v),
-});
-const beamKnob = knob('beam', {
-  min: 200,
-  max: 20000,
-  value: display.beamSpeed,
-  log: true,
-  format: (v) => (v < 1000 ? `${Math.round(v)}/s` : `${(v / 1000).toFixed(1)}k/s`),
-  onChange: (v) => (display.beamSpeed = v),
-});
+const { setPhosphor, knobs } = bindPanel(display, { storageKey: 'xy1024:demo:display' });
 
 // -- programs ---------------------------------------------------------------
 
@@ -86,7 +44,7 @@ function run(name) {
     signal,
     ui: {
       togglePhosphor: () => setPhosphor(display.color === 'green' ? 'orange' : 'green'),
-      setBeamSpeed: (v) => beamKnob.set(v),
+      setBeamSpeed: (v) => knobs.beam.set(v),
     },
     idle: () => display.idle().then(check),
     sleep: (ms) =>

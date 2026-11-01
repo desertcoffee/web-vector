@@ -1,12 +1,17 @@
-/* The news terminal reuses the demo housing with a wide 16:10 tube and no knob column. */
+/* The news terminal reuses the demo housing: a wide 16:10 tube plus the control column. */
+
+.news {
+  padding: 1rem;
+}
 
 .unit--news {
-  grid-template-columns: auto;
+  /* A slightly slimmer column than the demo's, so the tube keeps as much width as it can. */
+  --controls-w: 16.5rem;
 }
 
 .tube--wide {
   aspect-ratio: 16 / 10;
-  width: min(calc(100vw - 7rem), calc((100svh - 10.5rem) * 16 / 10), 120rem);
+  width: min(calc(100vw - var(--controls-w) - 8.5rem), calc((100svh - 10.5rem) * 16 / 10), 110rem);
   border-radius: 3.5% / 5.6%;
 }
 
@@ -14,30 +19,24 @@
   outline: none;
 }
 
-.brow__keys {
-  display: flex;
-  gap: 0.6rem;
-}
-.brow__keys .key {
+.brow__demo {
   min-height: 2.1rem;
   text-decoration: none;
 }
 
-.unit--news .hint {
-  margin: 0;
+.unit--news .switch .key {
+  padding-inline: 0.6rem;
+  letter-spacing: 0.12em;
 }
 
 @media (max-height: 820px) and (min-width: 901px) {
   .tube--wide {
-    width: min(calc(100vw - 6rem), calc((100svh - 8.5rem) * 16 / 10), 120rem);
+    width: min(calc(100vw - var(--controls-w) - 6.5rem), calc((100svh - 8.5rem) * 16 / 10), 110rem);
   }
 }
 
 @media (max-width: 900px) {
   .tube--wide {
     width: 100%;
-  }
-  .brow__keys .key {
-    padding-inline: 0.55rem;
   }
 }

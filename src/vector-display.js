@@ -36,6 +36,7 @@ const DEFAULTS = {
   writeBoost: 1.6,
   flash: 9,
   dwell: 0.8,
+  order: 'queue',
   glow: 1,
   maxPixelRatio: 2,
   autoStart: true,
@@ -45,6 +46,7 @@ const BEAM_SIGMA = 1.05; // spot size in display units at focus = 1
 const MIN_SIGMA_PX = 0.8;
 const FLASH_DECAY = 0.028; // seconds; the fast phosphor component that makes the beam head glint
 const BLANK_COST = 0.12; // blank moves run ~8x faster than writes
+const SCAN_ROW = 3; // in 'scan' order, shapes whose tops are this close count as one row
 const SETTLE = 6; // fixed cost (in display units) to settle the beam at a stroke start
 const DOT_COST = 10; // time a dot stroke dwells, in display units
 const DOT_GAIN = 2.2;
@@ -135,18 +137,33 @@ export class Shape {
     return this;
   }
 
+  /** Current top edge and left edge of the geometry, in display units. */
+  get top() {
+    return this.minY + this.offsetY;
+  }
+
+  get left() {
+    return this.minX + this.offsetX;
+  }
+
   remove() {
     this.display._remove(this);
   }
 
   _build(input) {
     this.strokes = [];
+    this.minX = Infinity;
+    this.minY = Infinity;
     let t = 0;
     let lastX = null;
     let lastY = null;
     for (const points of normalizeStrokes(input)) {
       const st = buildStroke(points);
       if (!st) continue;
+      for (let i = 0; i < st.pts.length; i += 2) {
+        if (st.pts[i] < this.minX) this.minX = st.pts[i];
+        if (st.pts[i + 1] < this.minY) this.minY = st.pts[i + 1];
+      }
       if (lastX !== null) t += Math.hypot(st.pts[0] - lastX, st.pts[1] - lastY) * BLANK_COST;
       t += SETTLE;
       st.start = t;
@@ -386,6 +403,9 @@ export class VectorDisplay {
    *   glow          bloom strength multiplier
    *   writeBoost    afterglow added where the beam has just written (decays over `persistence`)
    *   flash         brief extra brightness at the beam head
+   *   order         'queue': trace shapes in the order they were added (default)
+   *                 'scan':  always trace the top-most waiting shape next, left to right
+   *                          within a row, like reading (good for UIs)
    */
   constructor(canvas, options = {}) {
     const opts = { ...DEFAULTS, ...options };
@@ -401,6 +421,7 @@ export class VectorDisplay {
     this.writeBoost = opts.writeBoost;
     this.flash = opts.flash;
     this.dwell = opts.dwell;
+    this.order = opts.order;
     this.glow = opts.glow;
     this.maxPixelRatio = opts.maxPixelRatio;
 
@@ -730,11 +751,35 @@ export class VectorDisplay {
     return (s.intensity * this.intensity) / this._range / this._focusNorm;
   }
 
+  /**
+   * The shape the beam works on next, moved to the front of the queue. A shape already
+   * being traced always finishes first, and priority shapes keep their place; otherwise
+   * 'scan' order picks the top-most waiting shape (left-most within its row).
+   */
+  _head() {
+    const q = this.queue;
+    const first = q[0];
+    if (this.order !== 'scan' || first.state === 'drawing' || first.priority) return first;
+    let top = Infinity;
+    for (const s of q) if (s.top < top) top = s.top;
+    let best = 0;
+    let left = Infinity;
+    for (let i = 0; i < q.length; i++) {
+      const s = q[i];
+      if (s.top <= top + SCAN_ROW && s.left < left) {
+        best = i;
+        left = s.left;
+      }
+    }
+    if (best) q.unshift(q.splice(best, 1)[0]);
+    return q[0];
+  }
+
   /** Advance the beam through the queue, depositing write energy along its path. */
   _advance(dt, tau) {
     let left = dt;
     while (left > 1e-9 && this.queue.length) {
-      const s = this.queue[0];
+      const s = this._head();
       s.state = 'drawing';
       const speed = Math.max(1, s.speed ?? this.beamSpeed);
       const need = (s.total - s.progress) / speed;

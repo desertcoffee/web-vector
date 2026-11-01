@@ -6,6 +6,9 @@
 // the shapes already on the tube:
 //   same key, same sig     -> the shape stays (and slides if it moved); no re-trace
 //   new key or changed sig -> the old shape fades out and the beam traces the new one
+// Content that scrolls into view is held back until the scroll comes to rest, so the
+// beam paints the newly revealed area top-down instead of chasing the scroll edge
+// (pair this with the display's `order: 'scan'`).
 // Event handlers (on:click, on:input, on:submit) run, then the view re-renders on the
 // next frame. Call app.invalidate() after changing state from anywhere else.
 
@@ -145,7 +148,18 @@ export class UIRuntime {
         key = `${key}~${n}`;
       }
       let e = this.entries.get(key);
-      if (e && e.sig === it.sig && e.shape.state !== 'removed') {
+      if (e?.shape.state === 'removed') e = null;
+      const moving = it.scroll && (it.scroll.y !== it.scroll.target || it.scroll.dragging);
+      if (moving) {
+        // Something sliding out from under the viewport edge would otherwise appear
+        // untraced; retire it and let it be traced, in order, once the scroll settles.
+        if (e && it.vis > e.vis + 0.5) {
+          e.shape.remove();
+          e = null;
+        }
+        if (!e) continue;
+      }
+      if (e && e.sig === it.sig) {
         if (it.abs) {
           const clipKey = `${it.x},${it.y}`;
           if (!e.clipped || e.clipKey !== clipKey) {
@@ -162,6 +176,7 @@ export class UIRuntime {
           e.shape.offsetX = it.x;
           e.shape.offsetY = it.y;
         }
+        e.vis = it.vis;
         if (it.priority) this.display.prioritize(e.shape);
       } else {
         e?.shape.remove();
@@ -170,7 +185,7 @@ export class UIRuntime {
           shape.offsetX = it.x;
           shape.offsetY = it.y;
         }
-        e = { shape, sig: it.sig, clipped: !!it.abs, clipKey: `${it.x},${it.y}` };
+        e = { shape, sig: it.sig, clipped: !!it.abs, clipKey: `${it.x},${it.y}`, vis: it.vis };
       }
       e.shape.intensity = it.intensity;
       e.shape.color = it.color ?? null;
@@ -191,7 +206,7 @@ export class UIRuntime {
     on(c, 'pointermove', (e) => this._move(e));
     on(c, 'pointerdown', (e) => this._down(e));
     on(c, 'pointerup', (e) => this._up(e));
-    on(c, 'pointercancel', () => (this._press = null));
+    on(c, 'pointercancel', () => this._endPress());
     on(c, 'pointerleave', () => {
       if (this._press) return;
       this.pointer = null;
@@ -256,6 +271,7 @@ export class UIRuntime {
       if (!press.dragging && Math.abs(dy) > 6) press.dragging = true;
       if (press.dragging) {
         const st = press.scroll.state;
+        st.dragging = true;
         st.target = st.y = clamp(press.start + dy, 0, st.max);
         this.invalidate();
         return;
@@ -281,9 +297,19 @@ export class UIRuntime {
     this._setHover(hit?.L.key ?? null);
   }
 
-  _up(e) {
+  /** Ends a press; a drag-scroll that was holding back new content releases it. */
+  _endPress() {
     const press = this._press;
     this._press = null;
+    if (press?.scroll?.state.dragging) {
+      press.scroll.state.dragging = false;
+      this.invalidate();
+    }
+    return press;
+  }
+
+  _up(e) {
+    const press = this._endPress();
     if (e.pointerType !== 'mouse') {
       this.pointer = null;
       this._setHover(null);

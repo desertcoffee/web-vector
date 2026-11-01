@@ -122,18 +122,6 @@ button {
   align-items: center;
   gap: 2rem;
 }
-.brow__link {
-  font-size: 0.56rem;
-  letter-spacing: 0.3em;
-  text-transform: uppercase;
-  text-decoration: none;
-  color: var(--ink-dim);
-  transition: color 200ms ease;
-}
-.brow__link:hover,
-.brow__link:focus-visible {
-  color: var(--phos);
-}
 
 /* Soft keys under the screen, scope-style. */
 .softkeys {
@@ -321,6 +309,64 @@ button {
   outline: 1px solid var(--phos);
   outline-offset: 3px;
 }
+.key:disabled {
+  cursor: default;
+  color: var(--ink-dim);
+  opacity: 0.6;
+}
+
+/* A key that leads somewhere else: phosphor-lit, with a lamp that breathes. */
+.key--feature {
+  --lit: var(--phos);
+  min-height: 2.2rem;
+  padding-inline: 0.9rem;
+  text-decoration: none;
+  color: var(--phos);
+  text-shadow: 0 0 8px color-mix(in oklab, var(--phos) 55%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.08),
+    inset 0 -2px 0 rgb(0 0 0 / 0.35),
+    0 3px 0 #08080a,
+    0 5px 10px rgb(0 0 0 / 0.55),
+    0 0 0 1px color-mix(in oklab, var(--phos) 40%, transparent),
+    0 0 22px -6px color-mix(in oklab, var(--phos) 55%, transparent);
+  transition:
+    translate 60ms ease,
+    box-shadow 200ms ease,
+    color 200ms ease;
+}
+.key--feature:hover {
+  color: color-mix(in oklab, var(--phos) 55%, #fff);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.08),
+    inset 0 -2px 0 rgb(0 0 0 / 0.35),
+    0 3px 0 #08080a,
+    0 5px 10px rgb(0 0 0 / 0.55),
+    0 0 0 1px color-mix(in oklab, var(--phos) 70%, transparent),
+    0 0 30px -4px color-mix(in oklab, var(--phos) 70%, transparent);
+}
+.key--feature > .lamp {
+  animation: lamp-breathe 2.6s ease-in-out infinite;
+}
+.key__arrow {
+  font-family: var(--mono);
+  letter-spacing: 0;
+  transition: translate 180ms ease;
+}
+.key--feature:hover .key__arrow {
+  translate: 3px 0;
+}
+@keyframes lamp-breathe {
+  50% {
+    filter: brightness(0.55);
+    box-shadow: 0 0 3px color-mix(in oklab, var(--lit) 50%, transparent);
+  }
+}
+
+.key--reset {
+  justify-content: center;
+  min-height: 2.1rem;
+}
 
 .key__num {
   font-family: var(--mono);
@@ -400,6 +446,8 @@ button {
   visibility: hidden;
 }
 .lamp--power,
+.key--feature > .lamp,
+.key--reset:not(:disabled) > .lamp,
 [aria-pressed='true'] > .lamp {
   background: radial-gradient(circle at 40% 35%, #fff 0 12%, var(--lit) 45%, color-mix(in oklab, var(--lit) 60%, #000));
   box-shadow:
@@ -608,5 +656,6 @@ button {
 @media (prefers-reduced-motion: reduce) {
   * {
     transition: none !important;
+    animation: none !important;
   }
 }

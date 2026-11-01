@@ -1,15 +1,17 @@
 import { VectorDisplay } from '../../src/vector-display.js';
 import { mount } from '../../src/ui/index.js';
 import { view, onRouteChange } from './app.js';
+import { bindPanel } from '../../demo/controls.js';
 
-const root = document.documentElement;
 const canvas = document.getElementById('screen');
 
 let display;
 try {
-  // A wide 16:10 tube, a fast beam (a whole page traces in about two seconds),
-  // and a little less corner dwell so small text doesn't look beaded.
+  // A wide 16:10 tube, a fast beam (a whole page traces in about two seconds), scan
+  // order so the beam always paints top-down, and a little less corner dwell so small
+  // text doesn't look beaded.
   display = new VectorDisplay(canvas, {
+    order: 'scan',
     width: 1280,
     height: 800,
     beamSpeed: 42000,
@@ -29,14 +31,9 @@ addEventListener('hashchange', () => {
   app.invalidate();
 });
 
-const buttons = document.querySelectorAll('[data-set-phosphor]');
-buttons.forEach((b) =>
-  b.addEventListener('click', () => {
-    display.color = b.dataset.setPhosphor;
-    root.dataset.phosphor = display.color;
-    buttons.forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
-  }),
-);
+// Saved separately from the demo's settings, since the defaults differ. This page's beam
+// runs far faster than the demo's, so its knob needs more headroom.
+bindPanel(display, { storageKey: 'xy1024:news:display', knobs: { beam: { max: 100000 } } });
 
 // For poking at it from the console.
 window.vd = display;

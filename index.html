@@ -26,7 +26,9 @@
             <span class="brand__kind">Random-scan display</span>
           </div>
           <div class="brow__right">
-            <a class="brow__link" href="hn.html">News terminal →</a>
+            <a class="key key--feature" href="hn.html">
+              <span class="lamp" aria-hidden="true"></span>News terminal<span class="key__arrow" aria-hidden="true">→</span>
+            </a>
             <div class="brow__power"><span class="lamp lamp--power" aria-hidden="true"></span>Power</div>
           </div>
         </header>
@@ -95,7 +97,10 @@
               <output class="knob__value"></output>
             </div>
           </div>
-          <p class="hint">Drag, scroll or arrow keys · double-click resets</p>
+          <p class="hint">Drag, scroll or arrow keys · double-click resets · saved in this browser</p>
+          <button class="key key--reset" data-action="reset-display" title="Restore this page's default phosphor and beam settings" disabled>
+            <span class="lamp" aria-hidden="true"></span>Reset to defaults
+          </button>
         </section>
 
         <dl class="plate">

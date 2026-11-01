@@ -20,7 +20,9 @@ python3 -m http.server 8000
 ```
 
 The demo is an instrument-style monitor with a phosphor switch, four knobs (intensity,
-focus, persistence and beam rate) and five programs: a title card, a Battlezone-style
+focus, persistence and beam rate) and five programs. Each page saves its knob and
+phosphor settings in `localStorage` as you change them; **Reset to defaults** puts them
+back. The five programs are a title card, a Battlezone-style
 terrain, a two-channel oscilloscope, a terminal you can type into (try `HELP`), and a
 sketch pad. The display is exposed as `window.vd`, so you can draw from the console:
 
@@ -29,8 +31,8 @@ vd.line(100, 100, 900, 600);
 vd.text('HELLO', 512, 360, { size: 60, align: 'center', color: 'alt' });
 ```
 
-`hn.html` is the news terminal: Hacker News rebuilt with the UI DSL on a wide tube, using
-sample data (`examples/hn/data.js`; every story, user and comment is made up). You can
+`hn.html` is the news terminal: Hacker News rebuilt with the UI DSL on a wide tube, with
+the same phosphor switch and beam knobs as the demo, using sample data (`examples/hn/data.js`; every story, user and comment is made up). You can
 vote, hide, collapse threads, reply, log in under any name, submit, search, and page
 through. Routes live in the URL hash, so back and forward work.
 
@@ -67,6 +69,7 @@ can be any CSS size; the display tracks resizes and device pixel ratio.
 | `writeBoost`  | 1.6       | afterglow where the beam has just written                       |
 | `flash`       | 9         | brief extra brightness at the beam head                         |
 | `dwell`       | 0.8       | brightness of beam dwell at stroke ends and sharp corners       |
+| `order`       | `'queue'` | `'queue'` traces shapes in the order they were added; `'scan'` always traces the top-most waiting shape next, left to right within a row |
 
 All of these except `width`/`height` are plain properties you can change at any time,
 e.g. `vd.color = 'orange'`. Lines that use the default colour cross-fade to the new phosphor.
@@ -74,7 +77,7 @@ e.g. `vd.color = 'orange'`. Lines that use the default colour cross-fade to the 
 ### Drawing
 
 Every call queues a shape for the beam and returns a `Shape`. The beam draws shapes one
-at a time, in order.
+at a time, in queue order or top-down depending on the `order` option.
 
 - `line(x0, y0, x1, y1, opts)`
 - `path(points, opts)`: open polyline, `points` is `[[x, y], ...]`
@@ -165,8 +168,10 @@ reconciles them with the shapes already on the tube:
 - An item whose content changed fades out while the beam traces its replacement.
 
 So hiding a story slides the rows below it up and re-traces only the rank numbers.
-Typing traces one glyph per keystroke. Content scrolled into view gets traced, and
-whatever is under the pointer or focus jumps the beam queue. Give list items a `key` so
+Typing traces one glyph per keystroke. Content that scrolls into view is held back until
+the scroll comes to rest. With the display in `order: 'scan'` (as the news terminal is),
+the beam then paints the newly revealed area strictly top-down, whichever direction you
+scrolled. Whatever is under the pointer or focus still jumps the beam queue. Give list items a `key` so
 they keep their identity when they move.
 
 Handlers run, then the view re-renders on the next frame; call `app.invalidate()` after
