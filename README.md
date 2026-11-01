@@ -4,6 +4,10 @@ A vector (random-scan) CRT for the browser. One simulated electron beam traces e
 line onto a near-black tube in green or orange phosphor. Lines are the only primitive
 (text is a stroke font), and every line is drawn on by the beam when it appears.
 
+On top of the display there's a small UI layer: a markup DSL for general interface
+primitives, with flex layout and a runtime that only re-traces what changed. A Hacker
+News recreation built with it is included.
+
 No dependencies and no build step. It uses plain ES modules and WebGL2.
 
 ## Run the demo
@@ -24,6 +28,11 @@ sketch pad. The display is exposed as `window.vd`, so you can draw from the cons
 vd.line(100, 100, 900, 600);
 vd.text('HELLO', 512, 360, { size: 60, align: 'center', color: 'alt' });
 ```
+
+`hn.html` is the news terminal: Hacker News rebuilt with the UI DSL on a wide tube, using
+sample data (`examples/hn/data.js`; every story, user and comment is made up). You can
+vote, hide, collapse threads, reply, log in under any name, submit, search, and page
+through. Routes live in the URL hash, so back and forward work.
 
 ## Use it
 
@@ -80,8 +89,9 @@ at a time, in order.
 - `clientToDisplay(clientX, clientY)`: maps a pointer position to display units, accounting for curvature
 
 Shape options: `color` (`'green'`, `'orange'`, `'alt'` for whichever phosphor the display
-*isn't* using, or omit it to follow the display), `intensity`, and `speed` (overrides
-`beamSpeed` for this shape).
+*isn't* using, or omit it to follow the display), `intensity`, `speed` (overrides
+`beamSpeed` for this shape), and `priority` (trace it ahead of other queued shapes;
+`vd.prioritize(shape)` does the same for a shape that's already queued).
 
 ### `Shape`
 
@@ -93,6 +103,76 @@ Shape options: `color` (`'green'`, `'orange'`, `'alt'` for whichever phosphor th
 
 The stroke font is also exported from `src/vector-font.js` (`textStrokes`, `measureText`)
 if you want text geometry for `update()`.
+
+## UI DSL
+
+`src/ui/` is a small declarative UI layer for the display. Views are written in a
+markup language embedded in tagged templates. `${}` holes carry data, child nodes and
+event handlers:
+
+```js
+import { ui, mount } from './src/ui/index.js';
+
+let count = 0;
+const view = () => ui`
+  column gap=10 pad=24 {
+    text "Clicked ${count} times" size=20 bold
+    row gap=8 {
+      button "Add one" on:click=${() => count++}
+      link "Reset" dim on:click=${() => (count = 0)}
+    }
+    ${['alpha', 'beta'].map((name) => ui`text ${name} key=${name}`)}
+  }`;
+
+const app = mount(vd, view, { style: { size: 12 } });
+```
+
+**Syntax.** `type ["content"] attr=value attr ... { children }`. A node ends at a newline,
+`;` or `}`, so several nodes can share a line: `row { text "a"; text "b" }`. Values can be
+strings (which may contain holes), numbers, bare words or holes, and a bare attribute
+means `true`. A hole in attribute position spreads an object of props, and `//` starts a
+comment. A child hole may be a node, an array of nodes, a string, or `null`/`false`.
+Templates are parsed once per call site. Errors name the problem and the template line,
+e.g. `"link" starts a new element; separate nodes with a newline or ";"`. If you'd rather
+not use templates, `h(type, props, ...children)` builds the same nodes.
+
+**Elements**
+
+| element | what it is |
+| --- | --- |
+| `column`, `row` | flex containers: `gap`, `pad`, `align` (`start` `center` `end` `stretch`, plus `baseline` for rows; rows default to baseline), `justify` (`start` `center` `end` `between`) |
+| `box` | a column with a border |
+| `stack` | children on top of each other |
+| `scroll` | a column that clips and scrolls (wheel, arrow keys, touch drag) and has a scrollbar |
+| `text "..."` | `size`, `bold`, `wrap`, `align` (`left` `center` `right`), `underline` |
+| `link "..."` | text that underlines on hover; `on:click`, or `href` (`#...` routes, anything else opens a new tab) |
+| `button "..."` | chamfered, bordered label |
+| `input` | single-line field: `value`, `placeholder`, `password`, `autofocus`, `on:input(value)`, `on:submit(value)` |
+| `icon "name"` | `upvote` `downvote` `chevron-*` `arrow-left/right` `close` `plus` `minus` `check` `menu` `search` `circle` `star` `external` `dot` |
+| `divider` | a line across its parent (vertical inside a row) |
+| `spacer` | flexible space, or a fixed gap with `size=` |
+
+Every element also takes `key`, `width`/`height` (a number or `fill`), `grow`,
+`pad` (CSS-style shorthand) or `padX`/`padY`, `border` (`true` or `dashed`) with
+`chamfer=`, and `fill=hatch` (a line-hatched background that leaves a margin around the
+content, with `hatch=` spacing). `on:click` makes any element clickable. `color`,
+`size`, `spacing` and `lineHeight` are inherited; `intensity` multiplies down the tree,
+and `dim`/`bright` are shorthands for it.
+
+**Rendering.** Every render lays out and paints the tree into keyed draw items, then
+reconciles them with the shapes already on the tube:
+- An unchanged item stays put, and a moved one slides into place, leaving a phosphor ghost.
+- An item whose content changed fades out while the beam traces its replacement.
+
+So hiding a story slides the rows below it up and re-traces only the rank numbers.
+Typing traces one glyph per keystroke. Content scrolled into view gets traced, and
+whatever is under the pointer or focus jumps the beam queue. Give list items a `key` so
+they keep their identity when they move.
+
+Handlers run, then the view re-renders on the next frame; call `app.invalidate()` after
+changing state anywhere else. Hover, Tab and Shift+Tab focus (shown as corner
+brackets), Enter and Space activation, a blinking caret, and soft keyboards on touch
+devices are handled by the runtime.
 
 ## How it works
 

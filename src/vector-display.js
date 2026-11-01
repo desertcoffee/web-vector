@@ -104,6 +104,8 @@ export class Shape {
     this.intensity = opts.intensity ?? 1;
     /** Beam speed override for this shape, display units per second. */
     this.speed = opts.speed ?? null;
+    /** Set by display.prioritize(): traced ahead of ordinary queued shapes. */
+    this.priority = false;
     /** 'queued' | 'drawing' | 'drawn' | 'removed' */
     this.state = 'queued';
     this.progress = 0;
@@ -429,12 +431,28 @@ export class VectorDisplay {
 
   // -- drawing API ----------------------------------------------------------
 
-  /** Queue a shape made of strokes: [[[x, y], ...], ...]. Returns the Shape. */
+  /**
+   * Queue a shape made of strokes: [[[x, y], ...], ...]. Returns the Shape.
+   * `opts.priority` puts it ahead of everything not already being traced (use it for
+   * direct feedback, like a caret or the thing under the pointer).
+   */
   shape(strokes, opts) {
     const s = new Shape(this, strokes, opts);
     this.shapes.add(s);
     this.queue.push(s);
+    if (opts?.priority) this.prioritize(s);
     return s;
+  }
+
+  /** Move a still-queued shape to the front of the line (after other priority shapes). */
+  prioritize(s) {
+    const i = this.queue.indexOf(s);
+    if (i < 0 || s.state !== 'queued' || s.priority) return;
+    s.priority = true;
+    this.queue.splice(i, 1);
+    let at = 0;
+    while (at < this.queue.length && (this.queue[at].state === 'drawing' || this.queue[at].priority)) at++;
+    this.queue.splice(at, 0, s);
   }
 
   line(x0, y0, x1, y1, opts) {

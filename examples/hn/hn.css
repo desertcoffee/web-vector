@@ -1,0 +1,43 @@
+/* The news terminal reuses the demo housing with a wide 16:10 tube and no knob column. */
+
+.unit--news {
+  grid-template-columns: auto;
+}
+
+.tube--wide {
+  aspect-ratio: 16 / 10;
+  width: min(calc(100vw - 7rem), calc((100svh - 10.5rem) * 16 / 10), 120rem);
+  border-radius: 3.5% / 5.6%;
+}
+
+.tube--wide canvas:focus {
+  outline: none;
+}
+
+.brow__keys {
+  display: flex;
+  gap: 0.6rem;
+}
+.brow__keys .key {
+  min-height: 2.1rem;
+  text-decoration: none;
+}
+
+.unit--news .hint {
+  margin: 0;
+}
+
+@media (max-height: 820px) and (min-width: 901px) {
+  .tube--wide {
+    width: min(calc(100vw - 6rem), calc((100svh - 8.5rem) * 16 / 10), 120rem);
+  }
+}
+
+@media (max-width: 900px) {
+  .tube--wide {
+    width: 100%;
+  }
+  .brow__keys .key {
+    padding-inline: 0.55rem;
+  }
+}

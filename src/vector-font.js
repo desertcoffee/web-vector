@@ -90,10 +90,17 @@ function glyphFor(ch) {
   return GLYPHS[ch] ?? GLYPHS[ch.toUpperCase()] ?? FALLBACK;
 }
 
+const TYPOGRAPHIC = { '‘': "'", '’': "'", '“': '"', '”': '"', '–': '-', '—': '-', '…': '...', '•': '*', '·': '-' };
+
+/** Map typographic punctuation onto glyphs the font has. */
+export function normalizeText(str) {
+  return String(str).replace(/[‘’“”–—…•·]/g, (c) => TYPOGRAPHIC[c]);
+}
+
 /** Width of a single line of text in display units. */
 export function measureText(str, { size = 24, spacing = 1 } = {}) {
   const s = size / GLYPH_HEIGHT;
-  const longest = Math.max(0, ...String(str).split('\n').map((l) => l.length));
+  const longest = Math.max(0, ...normalizeText(str).split('\n').map((l) => l.length));
   if (!longest) return 0;
   return (longest * GLYPH_ADVANCE * spacing - (GLYPH_ADVANCE * spacing - GLYPH_WIDTH)) * s;
 }
@@ -105,7 +112,7 @@ export function measureText(str, { size = 24, spacing = 1 } = {}) {
 export function textStrokes(str, x, y, { size = 24, spacing = 1, lineHeight = 1.7, align = 'left' } = {}) {
   const s = size / GLYPH_HEIGHT;
   const strokes = [];
-  String(str).split('\n').forEach((line, row) => {
+  normalizeText(str).split('\n').forEach((line, row) => {
     const w = measureText(line, { size, spacing });
     let ox = x;
     if (align === 'center') ox -= w / 2;
