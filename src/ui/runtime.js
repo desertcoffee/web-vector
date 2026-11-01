@@ -17,6 +17,11 @@ import { build, measure, place } from './layout.js';
 import { paint } from './paint.js';
 
 const DEFAULT_STYLE = { color: null, intensity: 1, size: 12, spacing: 1, lineHeight: 1.6 };
+// How much of the pipeline a render needs. Hover, focus and the caret only change paint;
+// scrolling only moves things; anything else (state changes) rebuilds from the view.
+const PAINT = 1;
+const PLACE = 2;
+const FULL = 3;
 const CARET_BLINK = 0.53;
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const contains = (r, [x, y]) => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
@@ -45,7 +50,8 @@ export class UIRuntime {
     this.scrolls = [];
     this._caretClock = 0;
     this._press = null;
-    this._dirty = false;
+    this._need = 0;
+    this._root = null;
     this._off = [];
     if (!this.canvas.hasAttribute('tabindex')) this.canvas.tabIndex = 0;
     this._kbd = hiddenInput();
@@ -56,7 +62,11 @@ export class UIRuntime {
 
   /** Re-render on the next frame. */
   invalidate() {
-    this._dirty = true;
+    this._need = FULL;
+  }
+
+  _request(level) {
+    if (level > this._need) this._need = level;
   }
 
   destroy() {
@@ -91,38 +101,44 @@ export class UIRuntime {
       if (st.y === st.target) continue;
       st.y += (st.target - st.y) * (1 - Math.exp(-dt * 14));
       if (Math.abs(st.target - st.y) < 0.3) st.y = st.target;
-      this._dirty = true;
+      this._request(PLACE);
     }
     if (this._focused()?.type === 'input') {
       this._caretClock += dt;
       if (this._caretClock >= CARET_BLINK) {
         this._caretClock = 0;
         this.caretOn = !this.caretOn;
-        this._dirty = true;
+        this._request(PAINT);
       }
     }
-    if (this._dirty) this._render();
+    if (this._need) this._render();
   }
 
   _render() {
-    this._dirty = false;
-    this._live.clear();
-    const out = this.view();
-    const top = out instanceof UINode ? out : new UINode('column', null, {}, [out]);
-    const root = build(top, this.style, 'root');
+    const need = this._root ? this._need : FULL;
+    this._need = 0;
     const { width, height } = this.display;
-    root.fixedW = width;
-    root.fixedH = height;
-    this._seenScrolls = new Set();
-    measure(root, width);
-    place(root, 0, 0, width, height, this);
+    if (need >= FULL) {
+      this._live.clear();
+      const out = this.view();
+      const top = out instanceof UINode ? out : new UINode('column', null, {}, [out]);
+      this._root = build(top, this.style, 'root');
+      this._root.fixedW = width;
+      this._root.fixedH = height;
+      measure(this._root, width);
+    }
+    const root = this._root;
+    if (need >= PLACE) {
+      this._seenScrolls = new Set();
+      place(root, 0, 0, width, height, this);
+      for (const key of this.scrollStates.keys()) if (!this._seenScrolls.has(key)) this.scrollStates.delete(key);
+    }
 
     const ctx = { items: [], hits: [], focusables: [], scrolls: [], clip: null, owner: null, boost: 1, rt: this };
     paint(root, ctx);
     this.hits = ctx.hits;
     this.focusables = ctx.focusables;
     this.scrolls = ctx.scrolls;
-    for (const key of this.scrollStates.keys()) if (!this._seenScrolls.has(key)) this.scrollStates.delete(key);
     this._reconcile(ctx.items);
 
     if (this.focus && !this.focusables.some((f) => f.L.key === this.focus)) this._setFocus(null);
@@ -243,7 +259,7 @@ export class UIRuntime {
   _setHover(key) {
     if (key === this.hover) return;
     this.hover = key;
-    this.invalidate();
+    this._request(PAINT);
   }
 
   _cursor(hit) {
@@ -259,7 +275,7 @@ export class UIRuntime {
       this._caretClock = 0;
       this._kbd.focus({ preventScroll: true });
     } else if (document.activeElement === this._kbd) this.canvas.focus({ preventScroll: true });
-    this.invalidate();
+    this._request(PAINT);
   }
 
   _move(e) {
@@ -273,7 +289,7 @@ export class UIRuntime {
         const st = press.scroll.state;
         st.dragging = true;
         st.target = st.y = clamp(press.start + dy, 0, st.max);
-        this.invalidate();
+        this._request(PLACE);
         return;
       }
     }
@@ -303,7 +319,7 @@ export class UIRuntime {
     this._press = null;
     if (press?.scroll?.state.dragging) {
       press.scroll.state.dragging = false;
-      this.invalidate();
+      this._request(PAINT);
     }
     return press;
   }
@@ -357,7 +373,7 @@ export class UIRuntime {
 
   _scrollTo(st, y) {
     st.target = clamp(y, 0, st.max);
-    this.invalidate();
+    this._request(PLACE);
   }
 
   /** Tab order is paint order. Returns false at either end so focus can leave the canvas. */

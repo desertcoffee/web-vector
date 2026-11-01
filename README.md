@@ -32,9 +32,14 @@ vd.text('HELLO', 512, 360, { size: 60, align: 'center', color: 'alt' });
 ```
 
 `hn.html` is the news terminal: Hacker News rebuilt with the UI DSL on a wide tube, with
-the same phosphor switch and beam knobs as the demo, using sample data (`examples/hn/data.js`; every story, user and comment is made up). You can
-vote, hide, collapse threads, reply, log in under any name, submit, search, and page
-through. Routes live in the URL hash, so back and forward work.
+the same phosphor switch and beam knobs as the demo. It reads live data from the
+[HN Search API](https://hn.algolia.com/api) and is read-only: nothing is ever posted. You
+can browse the front page (ranked HN-style, with more pages after it), new, past, comments,
+ask, show, jobs, full comment threads (collapsible), user pages, submissions, stories from a
+site, and search. Story titles open the article in a new tab, as on HN. Routes live in the
+URL hash, so back and forward work. Data loading lives in `examples/hn/api.js`: a small
+cache that refreshes in the background, turns HN's HTML into plain text, and shows a retry
+link when a request fails.
 
 ## Use it
 
@@ -143,7 +148,7 @@ not use templates, `h(type, props, ...children)` builds the same nodes.
 
 | element | what it is |
 | --- | --- |
-| `column`, `row` | flex containers: `gap`, `pad`, `align` (`start` `center` `end` `stretch`, plus `baseline` for rows; rows default to baseline), `justify` (`start` `center` `end` `between`) |
+| `column`, `row` | flex containers: `gap`, `pad`, `align` (`start` `center` `end` `stretch`, plus `baseline` for rows; rows default to baseline), `justify` (`start` `center` `end` `between`). When a row overflows, its `wrap` text gives up width and wraps |
 | `box` | a column with a border |
 | `stack` | children on top of each other |
 | `scroll` | a column that clips and scrolls (wheel, arrow keys, touch drag) and has a scrollbar |
@@ -175,7 +180,8 @@ scrolled. Whatever is under the pointer or focus still jumps the beam queue. Giv
 they keep their identity when they move.
 
 Handlers run, then the view re-renders on the next frame; call `app.invalidate()` after
-changing state anywhere else. Hover, Tab and Shift+Tab focus (shown as corner
+changing state anywhere else. Hover, focus and the caret only repaint, and scrolling only
+re-positions the existing layout, so those stay cheap even on a 500-comment thread. Hover, Tab and Shift+Tab focus (shown as corner
 brackets), Enter and Space activation, a blinking caret, and soft keyboards on touch
 devices are handled by the runtime.
 

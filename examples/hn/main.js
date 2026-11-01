@@ -1,6 +1,7 @@
 import { VectorDisplay } from '../../src/vector-display.js';
 import { mount } from '../../src/ui/index.js';
-import { view, onRouteChange } from './app.js';
+import { view } from './app.js';
+import { onSettle, pending } from './api.js';
 import { bindPanel } from '../../demo/controls.js';
 
 const canvas = document.getElementById('screen');
@@ -26,10 +27,11 @@ try {
 }
 
 const app = mount(display, view, { style: { size: 12, spacing: 1, lineHeight: 1.55 } });
-addEventListener('hashchange', () => {
-  onRouteChange();
-  app.invalidate();
-});
+addEventListener('hashchange', () => app.invalidate());
+// Data arrives asynchronously: re-render when a request lands, and keep the loading
+// dots moving while any are in flight.
+onSettle(() => app.invalidate());
+setInterval(() => pending() && app.invalidate(), 320);
 
 // Saved separately from the demo's settings, since the defaults differ. This page's beam
 // runs far faster than the demo's, so its knob needs more headroom.

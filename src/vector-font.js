@@ -92,9 +92,18 @@ function glyphFor(ch) {
 
 const TYPOGRAPHIC = { '‘': "'", '’': "'", '“': '"', '”': '"', '–': '-', '—': '-', '…': '...', '•': '*', '·': '-' };
 
-/** Map typographic punctuation onto glyphs the font has. */
+/**
+ * Map text onto glyphs the font has: typographic punctuation to ASCII, accents stripped
+ * (é -> e), tabs to spaces, and anything else outside printable ASCII (emoji, CJK, ...)
+ * to a single unknown-glyph box. One output character per glyph keeps layout exact.
+ */
 export function normalizeText(str) {
-  return String(str).replace(/[‘’“”–—…•·]/g, (c) => TYPOGRAPHIC[c]);
+  return String(str)
+    .replace(/[‘’“”–—…•·]/g, (c) => TYPOGRAPHIC[c])
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\t/g, '  ')
+    .replace(/[^\n\x20-\x7e]/gu, '\u25a1');
 }
 
 /** Width of a single line of text in display units. */

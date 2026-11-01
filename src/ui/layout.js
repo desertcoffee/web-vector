@@ -32,6 +32,19 @@ function parsePad(props, defaults) {
   return { t, r, b, l };
 }
 
+// Text rarely changes between renders, so normalisation and wrapping are memoised.
+const memo = new Map();
+function cached(kind, key, compute) {
+  const k = `${kind}\u0000${key}`;
+  let v = memo.get(k);
+  if (v === undefined) {
+    if (memo.size > 20000) memo.clear();
+    v = compute();
+    memo.set(k, v);
+  }
+  return v;
+}
+
 function wrap(str, maxChars) {
   const out = [];
   for (const para of str.split('\n')) {
@@ -86,7 +99,7 @@ export function build(node, parentStyle, key, parentType = 'column') {
     fillH: p.height === 'fill',
     rect: null,
     m: null,
-    mw: NaN,
+    mc: null, // measure cache: available width -> size (lines included for text)
   };
 
   const sz = style.size;
@@ -116,7 +129,13 @@ export function build(node, parentStyle, key, parentType = 'column') {
 // ---------------------------------------------------------------------------
 
 export function measure(L, maxW) {
-  if (L.mw === maxW) return L.m;
+  // Measuring and placing ask at different widths, so keep every answer, not just the last.
+  const hit = L.mc?.get(maxW);
+  if (hit) {
+    L.m = hit;
+    if (hit.lines) L.lines = hit.lines;
+    return hit;
+  }
   const avail = L.fixedW ?? maxW;
   let m;
   switch (L.type) {
@@ -159,7 +178,8 @@ export function measure(L, maxW) {
   if (L.fixedW != null) m.w = L.fixedW;
   else if (L.fillW && Number.isFinite(maxW)) m.w = maxW;
   if (L.fixedH != null) m.h = L.fixedH;
-  L.mw = maxW;
+  if (L.lines && (L.type === 'text' || L.type === 'link' || L.type === 'button')) m.lines = L.lines;
+  (L.mc ??= new Map()).set(maxW, m);
   L.m = m;
   return m;
 }
@@ -167,14 +187,15 @@ export function measure(L, maxW) {
 /** Lines, width and height of a text node's content (excluding padding). */
 function textBlock(L, inner) {
   const { style } = L;
-  const str = normalizeText(L.content ?? '');
+  const raw = String(L.content ?? '');
+  const str = cached('n', raw, () => normalizeText(raw));
   const tm = textMetrics(style);
   let lines;
   if (L.props.wrap && Number.isFinite(inner)) {
     // Largest n with width(n) <= inner; the epsilon keeps exact fits from rounding down.
-    const n = Math.floor((inner + tm.advance - tm.width(1)) / tm.advance + 1e-6);
-    lines = wrap(str, Math.max(1, n));
-  } else lines = str.split('\n');
+    const n = Math.max(1, Math.floor((inner + tm.advance - tm.width(1)) / tm.advance + 1e-6));
+    lines = cached(`w${n}`, str, () => wrap(str, n));
+  } else lines = cached('s', str, () => str.split('\n'));
   L.lines = lines;
   const w = Math.max(0, ...lines.map((l) => tm.width(l.length)));
   const h = style.size + (lines.length - 1) * style.size * style.lineHeight;
@@ -195,6 +216,14 @@ function rowWidths(L, inner) {
     used += w;
     return w;
   });
+  // Overflowing? Text that can wrap gives up width, last child first (flex-shrink, for words).
+  for (let i = kids.length - 1; i >= 0 && used > inner + 0.01; i--) {
+    const k = kids[i];
+    if (k.grow > 0 || !k.props.wrap || !(k.type === 'text' || k.type === 'link')) continue;
+    const before = widths[i];
+    widths[i] = measure(k, Math.max(before * 0.25, before - (used - inner))).w;
+    used -= before - widths[i];
+  }
   const free = Math.max(0, inner - used);
   kids.forEach((k, i) => {
     if (k.grow > 0) {
