@@ -1,5 +1,5 @@
 # vector-ui
-
+<assets/vector_monitor.webm>
 A vector (random-scan) CRT for the browser. One simulated electron beam traces every
 line onto a near-black tube in green or orange phosphor. Lines are the only primitive
 (text is a stroke font), and every line is drawn on by the beam when it appears.
