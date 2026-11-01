@@ -98,10 +98,24 @@
             </div>
           </div>
           <p class="hint">Drag, scroll or arrow keys · double-click resets · saved in this browser</p>
-          <button class="key key--reset" data-action="reset-display" title="Restore this page's default phosphor and beam settings" disabled>
-            <span class="lamp" aria-hidden="true"></span>Reset to defaults
-          </button>
         </section>
+
+        <section class="group">
+          <h2 class="group__title">Refresh</h2>
+          <div class="toggles">
+            <button class="key key--toggle" data-toggle="redraw" aria-pressed="false" title="The beam has to keep redrawing everything itself; lines fade between passes">
+              <span class="lamp" aria-hidden="true"></span>Fade &amp; redraw
+            </button>
+            <button class="key key--toggle" data-toggle="autoPersist" aria-pressed="false" title="Keep persistence at least one redraw cycle long, so nothing fades out" disabled>
+              <span class="lamp lamp--alert" aria-hidden="true"></span>Auto persist
+            </button>
+          </div>
+          <p class="cycle"><span>Redraw cycle</span><output data-readout="cycle">free</output></p>
+        </section>
+
+        <button class="key key--reset" data-action="reset-display" title="Restore this page's default phosphor, beam and refresh settings" disabled>
+          <span class="lamp" aria-hidden="true"></span>Reset to defaults
+        </button>
 
         <dl class="plate">
           <div><dt>Deflection</dt><dd>XY · 1024 × 768</dd></div>

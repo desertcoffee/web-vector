@@ -20,9 +20,17 @@ python3 -m http.server 8000
 ```
 
 The demo is an instrument-style monitor with a phosphor switch, four knobs (intensity,
-focus, persistence and beam rate) and five programs. Each page saves its knob and
-phosphor settings in `localStorage` as you change them; **Reset to defaults** puts them
-back. The five programs are a title card, a Battlezone-style
+focus, persistence and beam rate), two refresh toggles and five programs.
+
+- **Fade & redraw** makes the single beam keep redrawing everything itself, so lines fade
+  between visits. A big screen or a slow beam leaves parts of it dim. The **Redraw cycle**
+  readout shows how long one pass takes.
+- **Auto persist** raises persistence to at least one redraw cycle, which keeps every line
+  visible. The persist knob keeps your own value; a red marker and red readout show the
+  value in use. Turn it off and persistence drops back to your value.
+
+Each page saves these settings in `localStorage` as you change them, and **Reset to
+defaults** puts them back. The five programs are a title card, a Battlezone-style
 terrain, a two-channel oscilloscope, a terminal you can type into (try `HELP`), and a
 sketch pad. The display is exposed as `window.vd`, so you can draw from the console:
 
@@ -75,6 +83,7 @@ can be any CSS size; the display tracks resizes and device pixel ratio.
 | `flash`       | 9         | brief extra brightness at the beam head                         |
 | `dwell`       | 0.8       | brightness of beam dwell at stroke ends and sharp corners       |
 | `order`       | `'queue'` | `'queue'` traces shapes in the order they were added; `'scan'` always traces the top-most waiting shape next, left to right within a row |
+| `refresh`     | `'continuous'` | `'continuous'` holds drawn lines at steady brightness for free; `'beam'` makes the beam redraw the display list pass after pass, and lines fade between visits |
 
 All of these except `width`/`height` are plain properties you can change at any time,
 e.g. `vd.color = 'orange'`. Lines that use the default colour cross-fade to the new phosphor.
@@ -93,6 +102,8 @@ at a time, in queue order or top-down depending on the `order` option.
 - `shape(strokes, opts)`: several polylines `[[[x, y], ...], ...]` traced as one shape
 - `clear()`: remove everything (it fades out over the persistence time)
 - `idle()`: a promise that resolves once everything queued so far has been traced
+- `cycleTime`: seconds for the beam to trace everything on the display list once (in
+  `refresh: 'beam'`, roughly how long each line waits between redraws)
 - `onFrame(fn)`: calls `fn(dt, time)` every frame, before the beam moves; returns an unsubscribe function
 - `clientToDisplay(clientX, clientY)`: maps a pointer position to display units, accounting for curvature
 
@@ -190,9 +201,13 @@ devices are handled by the runtime.
 - **Beam:** shapes are traced at a finite speed. Blank moves between strokes are cheap
   but not free, and each stroke start has a small settle time.
 - **Phosphor:** an RGBA16F accumulation buffer holds slow and fast components for each
-  colour. Lines on the display list are refreshed every frame to hold a steady brightness.
-  The beam head adds a short hot flash plus an afterglow that decays over `persistence`.
-  Removed or moved lines simply stop being refreshed and fade.
+  colour. The beam head adds a short hot flash plus an afterglow that decays over
+  `persistence`. Removed or moved lines stop being refreshed and fade.
+- **Refresh:** by default, lines on the display list are topped up every frame to hold a
+  steady brightness. In `refresh: 'beam'`, the beam serves new shapes first, then walks the
+  display list (top-down in `'scan'` order). Each visit tops a line back up to full
+  brightness, so how dim a line gets depends only on how long the beam took to come back.
+  A line that moved since its last visit is dark where it is now until the beam reaches it.
 - **Spot:** each segment is the analytic integral of a gaussian spot swept along it, so
   polylines join seamlessly. Ends and corners get extra dwell energy, as on real hardware.
 - **Composite:** a 4-level bloom, a saturating tone curve (bright cores bleach toward

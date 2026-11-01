@@ -8,6 +8,10 @@
 //    orange fast). Every frame it decays, lines on the display list are refreshed
 //    (holding them at a steady brightness), and the beam head deposits extra "write"
 //    energy: a brief hot flash plus an afterglow that settles back over `persistence`.
+//  * Refresh is continuous by default: everything drawn is held at steady brightness for
+//    free. With `refresh: 'beam'` the one beam has to redraw the display list itself, pass
+//    after pass; lines fade between visits, so a big screen or a slow beam leaves parts of
+//    it dim (`cycleTime` says how long a pass takes).
 //  * The beam spot is gaussian; each segment is the analytic integral of that spot
 //    swept along it, so polylines join seamlessly. Stroke ends and sharp corners get
 //    extra dwell energy, the way real deflection amplifiers linger at vertices.
@@ -37,6 +41,7 @@ const DEFAULTS = {
   flash: 9,
   dwell: 0.8,
   order: 'queue',
+  refresh: 'continuous',
   glow: 1,
   maxPixelRatio: 2,
   autoStart: true,
@@ -52,6 +57,21 @@ const DOT_COST = 10; // time a dot stroke dwells, in display units
 const DOT_GAIN = 2.2;
 const FLOATS_PER_INSTANCE = 9; // x0 y0 x1 y1 | slow e0 e1 | fast e0 e1 | channel
 const BLOOM_LEVELS = 4;
+
+/** Reading order: top to bottom, left to right among shapes that share a row. */
+function scanSort(list) {
+  list.sort((a, b) => a.top - b.top);
+  for (let i = 0; i < list.length; ) {
+    let j = i + 1;
+    while (j < list.length && list[j].top <= list[i].top + SCAN_ROW) j++;
+    if (j - i > 1) {
+      const row = list.slice(i, j).sort((a, b) => a.left - b.left);
+      for (let r = 0; r < row.length; r++) list[i + r] = row[r];
+    }
+    i = j;
+  }
+  return list;
+}
 
 // ---------------------------------------------------------------------------
 // Shapes
@@ -151,6 +171,7 @@ export class Shape {
   }
 
   _build(input) {
+    this._version = (this._version ?? 0) + 1;
     this.strokes = [];
     this.minX = Infinity;
     this.minY = Infinity;
@@ -403,6 +424,8 @@ export class VectorDisplay {
    *   glow          bloom strength multiplier
    *   writeBoost    afterglow added where the beam has just written (decays over `persistence`)
    *   flash         brief extra brightness at the beam head
+   *   refresh       'continuous': drawn lines stay lit for free (default)
+   *                 'beam': the beam must keep redrawing everything; lines fade between passes
    *   order         'queue': trace shapes in the order they were added (default)
    *                 'scan':  always trace the top-most waiting shape next, left to right
    *                          within a row, like reading (good for UIs)
@@ -422,6 +445,7 @@ export class VectorDisplay {
     this.flash = opts.flash;
     this.dwell = opts.dwell;
     this.order = opts.order;
+    this.refresh = opts.refresh;
     this.glow = opts.glow;
     this.maxPixelRatio = opts.maxPixelRatio;
 
@@ -432,6 +456,13 @@ export class VectorDisplay {
     this._instances = new Float32Array(FLOATS_PER_INSTANCE * 8192);
     this._count = 0;
     this._raf = 0;
+    this._frameNo = 0;
+    // 'beam' refresh: the current pass over the display list and the shape being redrawn.
+    this._pass = [];
+    this._passIndex = 0;
+    this._passFrame = -1;
+    this._redraw = null;
+    this._redrawP = 0;
 
     this._initGL();
     this._onLost = (e) => {
@@ -522,6 +553,13 @@ export class VectorDisplay {
 
   get busy() {
     return this.queue.length > 0;
+  }
+
+  /** Seconds for the beam to trace everything on the display list once. */
+  get cycleTime() {
+    let t = 0;
+    for (const s of this.shapes) t += s.total / Math.max(1, s.speed ?? this.beamSpeed);
+    return t;
   }
 
   /** Run `fn(dt, time)` every frame before the beam moves. Returns an unsubscribe function. */
@@ -785,7 +823,7 @@ export class VectorDisplay {
       const need = (s.total - s.progress) / speed;
       const t0 = dt - left;
       if (need <= left) {
-        this._sweep(s, s.progress, s.total, t0, t0 + need, dt, tau);
+        this._sweep(s, s.progress, s.total, t0, t0 + need, dt, tau, this.writeBoost, this.flash, 0);
         s.progress = s.total;
         left -= need;
         this.queue.shift();
@@ -793,24 +831,107 @@ export class VectorDisplay {
         s._resolve(s);
       } else {
         const p = s.progress + left * speed;
-        this._sweep(s, s.progress, p, t0, dt, dt, tau);
+        this._sweep(s, s.progress, p, t0, dt, dt, tau, this.writeBoost, this.flash, 0);
         s.progress = p;
         left = 0;
       }
     }
   }
 
-  _sweep(s, p0, p1, t0, t1, dt, tau) {
+  /**
+   * 'beam' refresh. New shapes are traced first (at full brightness plus the write glow);
+   * the rest of the time the beam walks the display list redrawing what's there. A redraw
+   * tops a line back up to full brightness, so how dim it got depends only on how long the
+   * beam took to come back round. A shape that moved since its last visit is dark where it
+   * is now, so it gets a full deposit.
+   */
+  _advanceBeam(dt, tau) {
+    let left = dt;
+    while (left > 1e-9) {
+      const t0 = dt - left;
+      if (this.queue.length) {
+        const s = this._head();
+        s.state = 'drawing';
+        const speed = Math.max(1, s.speed ?? this.beamSpeed);
+        const need = (s.total - s.progress) / speed;
+        const end = Math.min(s.total, s.progress + left * speed);
+        this._sweep(s, s.progress, end, t0, t0 + Math.min(need, left), dt, tau, 1 + this.writeBoost, this.flash, this.dwell);
+        s.progress = end;
+        if (need <= left) {
+          left -= need;
+          this.queue.shift();
+          s.state = 'drawn';
+          this._markLit(s);
+          s._resolve(s);
+        } else left = 0;
+        continue;
+      }
+      const s = this._nextRedraw();
+      if (!s) break;
+      const speed = Math.max(1, s.speed ?? this.beamSpeed);
+      const lit = s.litV === s._version && s.litX === s.offsetX && s.litY === s.offsetY;
+      const top = lit ? 1 - Math.exp(-(this.time - s.litAt) / tau) : 1;
+      const from = Math.min(this._redrawP, s.total);
+      const need = (s.total - from) / speed;
+      const end = Math.min(s.total, from + left * speed);
+      this._sweep(s, from, end, t0, t0 + Math.min(need, left), dt, tau, top, this.flash * top, this.dwell * top);
+      if (need <= left) {
+        left -= need;
+        this._markLit(s);
+        this._redraw = null;
+      } else {
+        this._redrawP = end;
+        left = 0;
+      }
+    }
+  }
+
+  /** Next shape to redraw, starting a new pass (at most one per frame) when one ends. */
+  _nextRedraw() {
+    const cur = this._redraw;
+    if (cur?.state === 'drawn' && this._redrawP < cur.total) return cur;
+    for (;;) {
+      while (this._passIndex < this._pass.length) {
+        const s = this._pass[this._passIndex++];
+        if (s.state === 'drawn' && s.total > 0) {
+          this._redraw = s;
+          this._redrawP = 0;
+          return s;
+        }
+      }
+      if (this._passFrame === this._frameNo) return null;
+      this._passFrame = this._frameNo;
+      this._pass = [...this.shapes].filter((s) => s.state === 'drawn');
+      if (this.order === 'scan') scanSort(this._pass);
+      this._passIndex = 0;
+      if (!this._pass.length) return null;
+    }
+  }
+
+  _markLit(s) {
+    s.litAt = this.time;
+    s.litV = s._version;
+    s.litX = s.offsetX;
+    s.litY = s.offsetY;
+  }
+
+  /**
+   * Trace progress p0..p1 of a shape between frame times t0..t1. `slowK`, `fastK` and
+   * `dwellK` scale the afterglow, the head flash and the corner dwell deposited.
+   */
+  _sweep(s, p0, p1, t0, t1, dt, tau, slowK, fastK, dwellK) {
     if (p1 <= p0) return;
     const ch = this._channel(s);
     const gain = this._gain(s);
-    const slow = this.writeBoost * gain;
-    const fast = this.flash * gain;
+    const slow = slowK * gain;
+    const fast = fastK * gain;
+    const dwell = dwellK * gain;
     const ox = s.offsetX;
     const oy = s.offsetY;
     // Energy deposited at progress p, already decayed to the end of this frame.
     const age = (p) => dt - (t0 + ((p - p0) / (p1 - p0)) * (t1 - t0));
-    const energy = (p) => slow * Math.exp(-age(p) / tau);
+    const glow = (p) => Math.exp(-age(p) / tau);
+    const energy = (p) => slow * glow(p);
     const flash = (p) => fast * Math.exp(-age(p) / FLASH_DECAY);
     for (const st of s.strokes) {
       if (st.start >= p1) break;
@@ -852,6 +973,18 @@ export class VectorDisplay {
           flash(st.start + lb),
           ch,
         );
+      }
+      if (dwell > 0) {
+        for (let j = 0; j < st.n; j++) {
+          const c = cum[j];
+          if (c < a) continue;
+          if (c > b || (c === b && b < st.len)) break;
+          if (st.weight[j] <= 0.01) continue;
+          const d = dwell * st.weight[j] * glow(st.start + c);
+          const x = pts[2 * j] + ox;
+          const y = pts[2 * j + 1] + oy;
+          this._push(x, y, x, y, d, d, 0, 0, ch);
+        }
       }
     }
   }
@@ -920,8 +1053,16 @@ export class VectorDisplay {
     const tau = Math.max(this.persistence, 0.005);
     const k = Math.exp(-dt / tau);
     this._count = 0;
-    this._advance(dt, tau);
-    for (const s of this.shapes) if (s.state !== 'queued') this._refresh(s, 1 - k);
+    this._frameNo++;
+    if (this.refresh === 'beam') this._advanceBeam(dt, tau);
+    else {
+      this._advance(dt, tau);
+      for (const s of this.shapes) {
+        if (s.state === 'queued') continue;
+        this._refresh(s, 1 - k);
+        this._markLit(s);
+      }
+    }
     this._render(k, Math.exp(-dt / FLASH_DECAY));
   }
 

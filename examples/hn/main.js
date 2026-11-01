@@ -34,8 +34,8 @@ onSettle(() => app.invalidate());
 setInterval(() => pending() && app.invalidate(), 320);
 
 // Saved separately from the demo's settings, since the defaults differ. This page's beam
-// runs far faster than the demo's, so its knob needs more headroom.
-bindPanel(display, { storageKey: 'xy1024:news:display', knobs: { beam: { max: 100000 } } });
+// runs far faster than the demo's (and fade & redraw wants more still), so its knob goes higher.
+bindPanel(display, { storageKey: 'xy1024:news:display', knobs: { beam: { max: 500000 } } });
 
 // For poking at it from the console.
 window.vd = display;

@@ -13,14 +13,14 @@ export const DISPLAY_KNOBS = {
   persistence: {
     prop: 'persistence',
     min: 0.02,
-    max: 2.5,
+    max: 10,
     log: true,
     format: (v) => (v < 1 ? `${Math.round(v * 1000)}ms` : `${v.toFixed(2)}s`),
   },
   beam: {
     prop: 'beamSpeed',
     min: 200,
-    max: 20000,
+    max: 100000,
     log: true,
     format: (v) => (v < 1000 ? `${Math.round(v)}/s` : `${(v / 1000).toFixed(1)}k/s`),
   },
@@ -47,27 +47,36 @@ function writeSettings(key, value) {
 }
 
 /**
- * Wire the page's panel to a display: [data-set-phosphor] keys, [data-knob] dials and the
+ * Wire the page's panel to a display: [data-set-phosphor] keys, [data-knob] dials,
+ * [data-toggle] keys ("redraw" switches the display to fade & redraw, "autoPersist" keeps
+ * persistence at least one redraw cycle long), the [data-readout="cycle"] output and the
  * [data-action="reset-display"] key.
  *
  * The display's settings at the time of the call are this page's defaults. Saved settings
  * from `storageKey` are restored over them (malformed values are ignored, out-of-range
- * numbers are clamped to the knob's range),
- * every change is saved, and the reset key, which is only enabled when something differs
- * from the defaults, puts everything back and forgets the saved copy.
- * `knobs` overrides knob ranges, e.g. { beam: { max: 100000 } }.
+ * numbers are clamped to the knob's range), every change is saved, and the reset key, which
+ * is only enabled when something differs from the defaults, puts everything back and
+ * forgets the saved copy. `knobs` overrides knob ranges, e.g. { beam: { max: 100000 } }.
+ *
+ * Auto persist never touches the persist knob itself: the knob keeps your value (and that
+ * is what's saved), while a red marker and readout show what's actually in use.
  */
 export function bindPanel(display, { storageKey, knobs: overrides = {} }) {
   const defs = {};
   for (const [name, def] of Object.entries(DISPLAY_KNOBS)) defs[name] = { ...def, ...overrides[name] };
-  const props = ['color', ...Object.values(defs).map((d) => d.prop)];
-  const defaults = Object.fromEntries(props.map((p) => [p, display[p]]));
+  const knobProps = Object.values(defs).map((d) => d.prop);
+
+  const defaults = { color: display.color, refresh: display.refresh, autoPersist: false };
+  for (const p of knobProps) defaults[p] = display[p];
+  const settings = { ...defaults };
 
   const saved = readSettings(storageKey);
-  if (PHOSPHORS.includes(saved.color)) display.color = saved.color;
+  if (PHOSPHORS.includes(saved.color)) settings.color = saved.color;
+  if (saved.refresh === 'beam' || saved.refresh === 'continuous') settings.refresh = saved.refresh;
+  if (typeof saved.autoPersist === 'boolean') settings.autoPersist = saved.autoPersist;
   for (const d of Object.values(defs)) {
     const v = saved[d.prop];
-    if (typeof v === 'number' && Number.isFinite(v)) display[d.prop] = clamp(v, d.min, d.max);
+    if (typeof v === 'number' && Number.isFinite(v)) settings[d.prop] = clamp(v, d.min, d.max);
   }
 
   const resetKey = document.querySelector('[data-action="reset-display"]');
@@ -75,48 +84,101 @@ export function bindPanel(display, { storageKey, knobs: overrides = {} }) {
   let ready = false;
   const save = () => {
     if (!ready) return;
-    const now = Object.fromEntries(props.map((p) => [p, display[p]]));
-    const changed = props.some((p) => !same(now[p], defaults[p]));
-    writeSettings(storageKey, changed ? now : null);
+    const changed = Object.keys(defaults).some((p) => !same(settings[p], defaults[p]));
+    writeSettings(storageKey, changed ? settings : null);
     if (resetKey) resetKey.disabled = !changed;
   };
 
   // Phosphor keys.
-  const keys = document.querySelectorAll('[data-set-phosphor]');
+  const phosphorKeys = document.querySelectorAll('[data-set-phosphor]');
   const setPhosphor = (color) => {
-    display.color = color;
+    settings.color = display.color = color;
     document.documentElement.dataset.phosphor = color;
-    keys.forEach((k) => k.setAttribute('aria-pressed', String(k.dataset.setPhosphor === color)));
+    phosphorKeys.forEach((k) => k.setAttribute('aria-pressed', String(k.dataset.setPhosphor === color)));
     save();
   };
-  keys.forEach((k) => k.addEventListener('click', () => setPhosphor(k.dataset.setPhosphor)));
-  setPhosphor(display.color);
+  phosphorKeys.forEach((k) => k.addEventListener('click', () => setPhosphor(k.dataset.setPhosphor)));
 
   // Knobs. Double-click returns a knob to the page default, not to whatever was restored.
+  // Persistence goes through the auto-persist loop below rather than straight to the display.
   const knobs = {};
   for (const [name, { prop, ...opts }] of Object.entries(defs)) {
+    if (prop !== 'persistence') display[prop] = settings[prop];
     const el = document.querySelector(`[data-knob="${name}"]`);
     if (!el) continue;
     knobs[name] = createKnob(el, {
       ...opts,
-      value: display[prop],
+      value: settings[prop],
       reset: defaults[prop],
       onChange: (v) => {
-        display[prop] = v;
+        settings[prop] = v;
+        if (prop !== 'persistence') display[prop] = v;
         save();
       },
     });
   }
 
+  // Refresh toggles.
+  const redrawKey = document.querySelector('[data-toggle="redraw"]');
+  const autoKey = document.querySelector('[data-toggle="autoPersist"]');
+  const syncToggles = () => {
+    display.refresh = settings.refresh;
+    redrawKey?.setAttribute('aria-pressed', String(settings.refresh === 'beam'));
+    autoKey?.setAttribute('aria-pressed', String(settings.autoPersist));
+    if (autoKey) autoKey.disabled = settings.refresh !== 'beam';
+  };
+  redrawKey?.addEventListener('click', () => {
+    settings.refresh = settings.refresh === 'beam' ? 'continuous' : 'beam';
+    syncToggles();
+    updatePersistence(0);
+    save();
+  });
+  autoKey?.addEventListener('click', () => {
+    settings.autoPersist = !settings.autoPersist;
+    syncToggles();
+    updatePersistence(0);
+    save();
+  });
+
+  // Auto persist: in fade & redraw, a line is visited once per cycle, so a persistence of at
+  // least one cycle keeps everything above ~37% brightness. Rise quickly so nothing fades
+  // while it catches up; settle back gently when the screen gets lighter.
+  const cycleOut = document.querySelector('[data-readout="cycle"]');
+  let effective = settings.persistence;
+  let shownCycle = '';
+  const updatePersistence = (dt) => {
+    const auto = settings.autoPersist && settings.refresh === 'beam';
+    const cycle = display.cycleTime;
+    if (auto) {
+      const target = Math.max(settings.persistence, Math.min(defs.persistence.max, cycle));
+      effective += (target - effective) * (1 - Math.exp(-dt * (target > effective ? 8 : 2)));
+      if (Math.abs(target - effective) < 1e-4) effective = target;
+    } else effective = settings.persistence;
+    display.persistence = effective;
+    knobs.persistence?.setMarker(auto && effective > settings.persistence * 1.005 ? effective : null);
+    if (cycleOut) {
+      const text = settings.refresh === 'beam' ? DISPLAY_KNOBS.persistence.format(cycle) : 'free';
+      if (text !== shownCycle) cycleOut.textContent = shownCycle = text;
+    }
+  };
+  display.onFrame(updatePersistence);
+
   const reset = () => {
-    setPhosphor(defaults.color);
+    Object.assign(settings, defaults);
+    setPhosphor(settings.color);
     for (const [name, knob] of Object.entries(knobs)) knob.set(defaults[defs[name].prop]);
+    syncToggles();
+    updatePersistence(0);
+    save();
   };
   resetKey?.addEventListener('click', reset);
 
+  setPhosphor(settings.color);
+  syncToggles();
+  updatePersistence(0);
   ready = true;
   save();
-  return { setPhosphor, knobs, reset };
+  return { setPhosphor, knobs, reset, settings };
 }
 
 export function createKnob(root, { min, max, value, reset = value, log = false, format = (v) => v.toFixed(2), onChange }) {
@@ -125,6 +187,9 @@ export function createKnob(root, { min, max, value, reset = value, log = false, 
   const toNorm = (v) => (log ? Math.log(v / min) / Math.log(max / min) : (v - min) / (max - min));
   const fromNorm = (n) => (log ? min * Math.pow(max / min, n) : min + n * (max - min));
   let n = toNorm(value);
+  let marker = null;
+  let markerValue = null;
+  const angle = (norm) => `${-SWEEP / 2 + clamp(norm, 0, 1) * SWEEP}deg`;
 
   dial.setAttribute('role', 'slider');
   dial.tabIndex = 0;
@@ -134,11 +199,32 @@ export function createKnob(root, { min, max, value, reset = value, log = false, 
   function set(next, emit = true) {
     n = clamp(next, 0, 1);
     const v = fromNorm(n);
-    dial.style.setProperty('--turn', `${-SWEEP / 2 + n * SWEEP}deg`);
+    dial.style.setProperty('--turn', angle(n));
     dial.setAttribute('aria-valuenow', String(+v.toPrecision(4)));
-    dial.setAttribute('aria-valuetext', format(v));
-    out.textContent = format(v);
+    describe();
     if (emit) onChange(v);
+  }
+
+  function describe() {
+    const own = format(fromNorm(n));
+    out.textContent = markerValue == null ? own : format(markerValue);
+    dial.setAttribute('aria-valuetext', markerValue == null ? own : `${own}, overridden to ${format(markerValue)}`);
+  }
+
+  /** Show (or with null, hide) a red marker for a value in effect other than the knob's own. */
+  function setMarker(v) {
+    const next = v == null ? null : +v.toPrecision(3);
+    if (next === markerValue) return;
+    markerValue = next;
+    if (next != null && !marker) {
+      marker = document.createElement('span');
+      marker.className = 'knob__marker';
+      marker.setAttribute('aria-hidden', 'true');
+      dial.append(marker);
+    }
+    if (next != null) marker.style.setProperty('--mark', angle(toNorm(next)));
+    root.classList.toggle('has-marker', next != null);
+    describe();
   }
 
   let drag = null;
@@ -178,5 +264,5 @@ export function createKnob(root, { min, max, value, reset = value, log = false, 
   });
 
   set(n, false);
-  return { set: (v) => set(toNorm(v)), get: () => fromNorm(n) };
+  return { set: (v) => set(toNorm(v)), get: () => fromNorm(n), setMarker };
 }
