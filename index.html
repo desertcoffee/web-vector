@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en" data-phosphor="green">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>XY-1024 · Vector Display</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Martian+Mono:wght@400;500&family=Michroma&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b0c0b'/%3E%3Cpath d='M6 22 12 10l6 10 8-12' fill='none' stroke='%2362ff94' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"
+    />
+    <link rel="stylesheet" href="demo/style.css" />
+    <script type="module" src="demo/main.js"></script>
+  </head>
+  <body>
+    <main class="unit">
+      <section class="face">
+        <header class="brow">
+          <div class="brand">
+            <span class="brand__model">XY-1024</span>
+            <span class="brand__kind">Random-scan display</span>
+          </div>
+          <div class="brow__power"><span class="lamp lamp--power" aria-hidden="true"></span>Power</div>
+        </header>
+
+        <div class="bezel">
+          <div class="tube">
+            <canvas id="screen" role="img" aria-label="Vector display"></canvas>
+            <p class="tube__fallback" hidden>This display needs WebGL2.</p>
+          </div>
+        </div>
+
+        <nav class="softkeys" aria-label="Programs">
+          <button class="key" data-program="title" aria-pressed="false">
+            <span class="lamp" aria-hidden="true"></span><span class="key__num">01</span>Title
+          </button>
+          <button class="key" data-program="wireframe" aria-pressed="false">
+            <span class="lamp" aria-hidden="true"></span><span class="key__num">02</span>Terrain
+          </button>
+          <button class="key" data-program="scope" aria-pressed="false">
+            <span class="lamp" aria-hidden="true"></span><span class="key__num">03</span>Scope
+          </button>
+          <button class="key" data-program="terminal" aria-pressed="false">
+            <span class="lamp" aria-hidden="true"></span><span class="key__num">04</span>Terminal
+          </button>
+          <button class="key" data-program="sketch" aria-pressed="false">
+            <span class="lamp" aria-hidden="true"></span><span class="key__num">05</span>Sketch
+          </button>
+          <button class="key key--icon" data-action="replay" aria-label="Replay program" title="Replay program">↺</button>
+        </nav>
+      </section>
+
+      <aside class="controls" aria-label="Display controls">
+        <section class="group">
+          <h2 class="group__title">Phosphor</h2>
+          <div class="switch">
+            <button class="key" data-set-phosphor="green" aria-pressed="true">
+              <span class="lamp lamp--green" aria-hidden="true"></span>Green
+            </button>
+            <button class="key" data-set-phosphor="orange" aria-pressed="false">
+              <span class="lamp lamp--orange" aria-hidden="true"></span>Orange
+            </button>
+          </div>
+        </section>
+
+        <section class="group">
+          <h2 class="group__title">Beam</h2>
+          <div class="knobs">
+            <div class="knob" data-knob="intensity">
+              <div class="knob__dial" aria-label="Intensity"><div class="knob__cap"></div></div>
+              <span class="knob__label">Intensity</span>
+              <output class="knob__value"></output>
+            </div>
+            <div class="knob" data-knob="focus">
+              <div class="knob__dial" aria-label="Focus"><div class="knob__cap"></div></div>
+              <span class="knob__label">Focus</span>
+              <output class="knob__value"></output>
+            </div>
+            <div class="knob" data-knob="persistence">
+              <div class="knob__dial" aria-label="Persistence"><div class="knob__cap"></div></div>
+              <span class="knob__label">Persist</span>
+              <output class="knob__value"></output>
+            </div>
+            <div class="knob" data-knob="beam">
+              <div class="knob__dial" aria-label="Beam speed"><div class="knob__cap"></div></div>
+              <span class="knob__label">Beam rate</span>
+              <output class="knob__value"></output>
+            </div>
+          </div>
+          <p class="hint">Drag, scroll or arrow keys · double-click resets</p>
+        </section>
+
+        <dl class="plate">
+          <div><dt>Deflection</dt><dd>XY · 1024 × 768</dd></div>
+          <div><dt>Beam</dt><dd>1 · gaussian spot</dd></div>
+          <div><dt>Phosphor</dt><dd>Green · orange</dd></div>
+          <div><dt>Primitives</dt><dd>Lines only</dd></div>
+          <div><dt>S/N</dt><dd>0417-B</dd></div>
+        </dl>
+      </aside>
+    </main>
+
+    <input id="kbd" class="visually-hidden" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Terminal input" />
+  </body>
+</html>

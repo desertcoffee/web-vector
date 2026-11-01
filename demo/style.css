@@ -1,0 +1,595 @@
+:root {
+  --room: #050605;
+  --housing-hi: #222326;
+  --housing: #18191b;
+  --housing-lo: #101112;
+  --well: #0a0a0b;
+  --ink: #b9bab2;
+  --ink-dim: #73756f;
+  --ink-faint: #34363a;
+  --green: #62ff94;
+  --orange: #ff9a3c;
+  --phos: var(--green);
+  --display: 'Michroma', 'Eurostile', 'Microgramma', 'Bank Gothic', sans-serif;
+  --mono: 'Martian Mono', ui-monospace, 'SFMono-Regular', monospace;
+  --controls-w: 17.5rem;
+  --tube-w: min(calc(100vw - var(--controls-w) - 12.5rem), calc((100svh - 17.5rem) * 4 / 3), 70rem);
+  color-scheme: dark;
+}
+:root[data-phosphor='orange'] {
+  --phos: var(--orange);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  display: grid;
+  min-height: 100svh;
+  padding: 2rem;
+  place-items: center;
+  background:
+    radial-gradient(ellipse 70% 55% at 42% 46%, color-mix(in oklab, var(--phos) 5%, transparent), transparent 70%),
+    radial-gradient(ellipse 120% 90% at 50% 40%, #0d0e0d 0%, var(--room) 70%);
+  color: var(--ink);
+  font-family: var(--display);
+  transition: background 600ms ease;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+/* -- housing ---------------------------------------------------------------- */
+
+.unit {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto var(--controls-w);
+  border-radius: 1.5rem;
+  background: linear-gradient(180deg, var(--housing-hi), var(--housing) 14%, var(--housing-lo));
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.07),
+    inset 0 -3px 0 rgb(0 0 0 / 0.55),
+    0 0 0 1px #000,
+    0 60px 120px -40px rgb(0 0 0 / 0.95),
+    0 30px 50px -30px rgb(0 0 0 / 0.8);
+  isolation: isolate;
+}
+
+/* Powder-coat grain. */
+.unit::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .5 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  opacity: 0.06;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+}
+
+.face {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.4rem 1.75rem 1.2rem;
+}
+
+.brow,
+.sill {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-inline: 0.4rem;
+}
+
+.brand {
+  display: flex;
+  align-items: baseline;
+  gap: 1.1rem;
+}
+.brand__model {
+  font-size: 1.15rem;
+  letter-spacing: 0.22em;
+  color: #d6d7cf;
+}
+.brand__kind,
+.brow__power {
+  font-size: 0.56rem;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+.brow__power {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+/* Soft keys under the screen, scope-style. */
+.softkeys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  padding: 0.2rem 1.25rem 0.3rem;
+  /* Size to the tube, never the other way round. */
+  container-type: inline-size;
+}
+.softkeys .key {
+  flex: 1 1 0;
+}
+.softkeys .key--icon {
+  flex: 0 0 2.6rem;
+}
+@container (max-width: 760px) {
+  .softkeys .key__num {
+    display: none;
+  }
+  .softkeys .key {
+    padding-inline: 0.65rem;
+    letter-spacing: 0.12em;
+  }
+}
+
+/* -- screen ----------------------------------------------------------------- */
+
+.bezel {
+  padding: 1.25rem;
+  border-radius: 2.1rem / 1.9rem;
+  background:
+    radial-gradient(ellipse at 50% 0%, rgb(255 255 255 / 0.035), transparent 60%),
+    var(--well);
+  box-shadow:
+    inset 0 3px 8px rgb(0 0 0 / 0.95),
+    inset 0 -1px 0 rgb(255 255 255 / 0.05),
+    0 1px 0 rgb(255 255 255 / 0.05),
+    0 -1px 0 rgb(0 0 0 / 0.7);
+}
+
+.tube {
+  position: relative;
+  width: var(--tube-w);
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border-radius: 4.5% / 6%;
+  background: #000;
+  box-shadow:
+    0 0 0 1px #000,
+    0 0 50px -12px color-mix(in oklab, var(--phos) 22%, transparent);
+  transition: box-shadow 600ms ease;
+}
+
+.tube canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Edge of the glass: falloff into the bezel plus a faint top-left sheen. */
+.tube::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(155deg, rgb(255 255 255 / 0.035), transparent 32%);
+  box-shadow:
+    inset 0 0 0 1px rgb(0 0 0 / 0.9),
+    inset 0 0 28px 6px rgb(0 0 0 / 0.75);
+  pointer-events: none;
+}
+
+.tube__fallback {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--phos);
+}
+.tube__fallback[hidden] {
+  display: none;
+}
+
+:root[data-running='sketch'] .tube canvas {
+  cursor: none;
+}
+:root[data-running='terminal'] .tube canvas {
+  cursor: text;
+}
+
+/* -- control column --------------------------------------------------------- */
+
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: 1.6rem;
+  padding: 1.6rem 1.6rem 1.4rem;
+  border-left: 1px solid #0b0b0c;
+  box-shadow: inset 1px 0 0 rgb(255 255 255 / 0.04);
+}
+
+.group {
+  display: grid;
+  gap: 1rem;
+}
+
+.group__title {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  margin: 0;
+  font-size: 0.56rem;
+  font-weight: 400;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+.group__title::before,
+.group__title::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--ink-faint);
+  box-shadow: 0 1px 0 rgb(0 0 0 / 0.6);
+}
+.group__title::before {
+  flex: 0 0 0.8rem;
+}
+
+.hint {
+  margin: -0.2rem 0 0;
+  font-family: var(--mono);
+  font-size: 0.55rem;
+  line-height: 1.6;
+  letter-spacing: 0.04em;
+  color: #57595c;
+  text-align: center;
+}
+
+/* -- keys ------------------------------------------------------------------- */
+
+.key {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 2.45rem;
+  padding: 0 0.75rem;
+  border: 0;
+  border-radius: 0.4rem;
+  background: linear-gradient(180deg, #2a2b2f, #1f2023 60%, #1b1c1f);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.08),
+    inset 0 -2px 0 rgb(0 0 0 / 0.35),
+    0 3px 0 #08080a,
+    0 5px 10px rgb(0 0 0 / 0.55);
+  font-size: 0.58rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink);
+  cursor: pointer;
+  transition:
+    translate 60ms ease,
+    box-shadow 60ms ease,
+    color 200ms ease;
+}
+.key:hover {
+  color: #e2e3dc;
+}
+.key:active {
+  translate: 0 2px;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.05),
+    inset 0 -1px 0 rgb(0 0 0 / 0.35),
+    0 1px 0 #08080a,
+    0 2px 4px rgb(0 0 0 / 0.5);
+}
+.key:focus-visible,
+.knob__dial:focus-visible {
+  outline: 1px solid var(--phos);
+  outline-offset: 3px;
+}
+
+.key__num {
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.05em;
+  color: var(--ink-dim);
+}
+
+.key--icon {
+  justify-content: center;
+  padding: 0;
+  font-family: var(--mono);
+  font-size: 0.95rem;
+  letter-spacing: 0;
+}
+
+.switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.65rem;
+}
+
+/* -- spec plate ------------------------------------------------------------- */
+
+.plate {
+  display: grid;
+  gap: 0.45rem;
+  margin: auto 0 0;
+  padding: 0.9rem 1rem;
+  border-radius: 0.35rem;
+  background: linear-gradient(180deg, #1c1d20, #18191b);
+  box-shadow:
+    inset 0 0 0 1px #0c0c0d,
+    inset 0 1px 0 rgb(255 255 255 / 0.05);
+  font-family: var(--mono);
+  font-size: 0.54rem;
+  letter-spacing: 0.06em;
+}
+.plate div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.plate dt {
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: #505255;
+}
+.plate dd {
+  margin: 0;
+  color: var(--ink-dim);
+}
+
+/* -- lamps ------------------------------------------------------------------ */
+
+.lamp {
+  --lit: var(--phos);
+  flex: none;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #3a3c3a, #151615 70%);
+  box-shadow:
+    inset 0 1px 1px rgb(0 0 0 / 0.8),
+    0 1px 0 rgb(255 255 255 / 0.06);
+  transition:
+    background 160ms ease,
+    box-shadow 160ms ease;
+}
+.lamp--green {
+  --lit: var(--green);
+}
+.lamp--orange {
+  --lit: var(--orange);
+}
+.lamp--blank {
+  visibility: hidden;
+}
+.lamp--power,
+[aria-pressed='true'] > .lamp {
+  background: radial-gradient(circle at 40% 35%, #fff 0 12%, var(--lit) 45%, color-mix(in oklab, var(--lit) 60%, #000));
+  box-shadow:
+    0 0 6px 1px color-mix(in oklab, var(--lit) 70%, transparent),
+    0 0 16px 2px color-mix(in oklab, var(--lit) 30%, transparent);
+}
+.lamp--power {
+  --lit: #ff4a2a;
+}
+[aria-pressed='true'] {
+  color: #e9eae2;
+}
+
+/* -- knobs ------------------------------------------------------------------ */
+
+.knobs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.4rem 0.8rem;
+  padding-top: 0.5rem;
+}
+
+.knob {
+  display: grid;
+  justify-items: center;
+  gap: 0.55rem;
+}
+
+.knob__dial {
+  --turn: 0deg;
+  position: relative;
+  width: 3.9rem;
+  aspect-ratio: 1;
+  margin-bottom: 0.25rem;
+  border-radius: 50%;
+  cursor: ns-resize;
+  touch-action: none;
+  user-select: none;
+}
+
+/* Scale: 11 ticks over the 270 degree sweep. */
+.knob__dial::before {
+  content: '';
+  position: absolute;
+  inset: -0.62rem;
+  border-radius: 50%;
+  background: repeating-conic-gradient(from -136deg, var(--ink-dim) 0 2deg, transparent 2deg 27deg);
+  mask:
+    radial-gradient(circle closest-side, transparent 80%, #000 81% 96%, transparent 97%),
+    conic-gradient(from -137deg, #000 0 274deg, transparent 0);
+  mask-composite: intersect;
+  opacity: 0.8;
+}
+
+.knob__cap {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  rotate: var(--turn);
+  background:
+    radial-gradient(circle closest-side, #262729 0 70%, #111213 71% 74%, transparent 75%),
+    repeating-conic-gradient(#121314 0 3deg, #2b2c2f 3deg 6deg);
+  box-shadow:
+    0 8px 14px rgb(0 0 0 / 0.65),
+    0 2px 3px rgb(0 0 0 / 0.7),
+    0 0 0 1px #050505;
+}
+/* Pointer line. */
+.knob__cap::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 14%;
+  width: 2px;
+  height: 28%;
+  translate: -50% 0;
+  border-radius: 1px;
+  background: #d9dad2;
+  box-shadow: 0 0 1px rgb(0 0 0 / 0.8);
+}
+/* Fixed top light that doesn't rotate with the cap. */
+.knob__dial::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle at 38% 28%, rgb(255 255 255 / 0.11), transparent 45%);
+  pointer-events: none;
+}
+
+.knob__label {
+  font-size: 0.52rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+
+.knob__value {
+  min-width: 5.2rem;
+  padding: 0.28rem 0.5rem;
+  border-radius: 0.25rem;
+  background: #060707;
+  box-shadow:
+    inset 0 1px 3px rgb(0 0 0 / 0.9),
+    0 1px 0 rgb(255 255 255 / 0.05);
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  text-align: center;
+  color: var(--phos);
+  text-shadow: 0 0 6px color-mix(in oklab, var(--phos) 55%, transparent);
+  transition: color 300ms ease;
+}
+.knob.is-turning .knob__value {
+  text-shadow: 0 0 9px var(--phos);
+}
+
+.visually-hidden {
+  position: fixed;
+  left: 0;
+  bottom: 0;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  font-size: 16px;
+  pointer-events: none;
+}
+
+/* -- narrow screens --------------------------------------------------------- */
+
+@media (max-width: 900px) {
+  body {
+    padding: 0.75rem;
+  }
+  .unit {
+    grid-template-columns: minmax(0, 1fr);
+    width: min(100%, 48rem);
+  }
+  .tube {
+    width: 100%;
+  }
+  .knobs {
+    gap: 1.2rem 0.4rem;
+  }
+  .knob__dial {
+    width: 3.2rem;
+  }
+  .knob__label {
+    font-size: 0.48rem;
+    letter-spacing: 0.12em;
+    text-align: center;
+  }
+  .knob__value {
+    min-width: 0;
+    width: 100%;
+    max-width: 5.2rem;
+    padding-inline: 0.2rem;
+    font-size: 0.56rem;
+  }
+  .face {
+    padding: 1rem 1rem 0.8rem;
+  }
+  .bezel {
+    padding: 0.75rem;
+  }
+  .controls {
+    border-left: 0;
+    border-top: 1px solid #0b0b0c;
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.04);
+  }
+  .knobs {
+    grid-template-columns: repeat(4, 1fr);
+  }
+  .softkeys {
+    padding-inline: 0;
+  }
+  .plate {
+    display: none;
+  }
+  .brand__kind {
+    display: none;
+  }
+}
+
+@media (max-height: 820px) and (min-width: 901px) {
+  :root {
+    --tube-w: min(calc(100vw - var(--controls-w) - 10rem), calc((100svh - 13rem) * 4 / 3), 70rem);
+  }
+  body {
+    padding: 1rem;
+  }
+  .face {
+    gap: 0.7rem;
+    padding: 0.9rem 1.2rem 0.9rem;
+  }
+  .bezel {
+    padding: 0.9rem;
+  }
+  .controls {
+    gap: 1.1rem;
+    padding: 1.1rem 1.4rem 1rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+  }
+}
