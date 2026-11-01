@@ -28,9 +28,14 @@ focus, persistence and beam rate), two refresh toggles and five programs.
 - **Auto persist** raises persistence to at least one redraw cycle, which keeps every line
   visible. The persist knob keeps your own value; a red marker and red readout show the
   value in use. Turn it off and persistence drops back to your value.
+- **Fast ghost fade** (on by default; works in fade & redraw, with or without auto persist)
+  lets whatever won't be redrawn fade in half a second instead of lingering at the full
+  persistence. That covers removed lines and the old positions of scrolled ones. Lines that
+  are still on screen keep the full persistence, whether auto persist set it or you did.
+  It only matters when persistence is longer than half a second.
 
-Each page saves these settings in `localStorage` as you change them, and **Reset to
-defaults** puts them back. The five programs are a title card, a Battlezone-style
+Each page saves these settings in this browser (`localStorage`) as you change them, and
+**Reset to defaults** puts them back. The five programs are a title card, a Battlezone-style
 terrain, a two-channel oscilloscope, a terminal you can type into (try `HELP`), and a
 sketch pad. The display is exposed as `window.vd`, so you can draw from the console:
 
@@ -83,6 +88,7 @@ can be any CSS size; the display tracks resizes and device pixel ratio.
 | `flash`       | 9         | brief extra brightness at the beam head                         |
 | `dwell`       | 0.8       | brightness of beam dwell at stroke ends and sharp corners       |
 | `order`       | `'queue'` | `'queue'` traces shapes in the order they were added; `'scan'` always traces the top-most waiting shape next, left to right within a row |
+| `ghostFade`   | `null`    | seconds; when shorter than `persistence`, phosphor left by lines that were removed or moved fades this fast, while lines still on the display list keep fading at `persistence` |
 | `refresh`     | `'continuous'` | `'continuous'` holds drawn lines at steady brightness for free; `'beam'` makes the beam redraw the display list pass after pass, and lines fade between visits |
 
 All of these except `width`/`height` are plain properties you can change at any time,
@@ -208,6 +214,11 @@ devices are handled by the runtime.
   display list (top-down in `'scan'` order). Each visit tops a line back up to full
   brightness, so how dim a line gets depends only on how long the beam took to come back.
   A line that moved since its last visit is dark where it is now until the beam reaches it.
+  Once moved lines come to rest (after a scroll, say), they're repainted first, top-down,
+  before the regular pass carries on.
+  With `ghostFade`, the buffer itself decays at the faster ghost rate, and lines still on
+  the display list are topped up each frame to make up the difference. So only the
+  leftovers fade quickly.
 - **Spot:** each segment is the analytic integral of a gaussian spot swept along it, so
   polylines join seamlessly. Ends and corners get extra dwell energy, as on real hardware.
 - **Composite:** a 4-level bloom, a saturating tone curve (bright cores bleach toward

@@ -49,8 +49,10 @@ function writeSettings(key, value) {
 /**
  * Wire the page's panel to a display: [data-set-phosphor] keys, [data-knob] dials,
  * [data-toggle] keys ("redraw" switches the display to fade & redraw, "autoPersist" keeps
- * persistence at least one redraw cycle long), the [data-readout="cycle"] output and the
- * [data-action="reset-display"] key.
+ * persistence at least one redraw cycle long, "ghostFade" lets whatever won't be redrawn,
+ * like the old positions of scrolled lines, fade in `ghostFade` seconds while what's still on
+ * screen keeps the full persistence), the [data-readout="cycle"] output and the
+ * [data-action="reset-display"] key. Auto persist and ghost fade only apply in fade & redraw.
  *
  * The display's settings at the time of the call are this page's defaults. Saved settings
  * from `storageKey` are restored over them (malformed values are ignored, out-of-range
@@ -61,12 +63,12 @@ function writeSettings(key, value) {
  * Auto persist never touches the persist knob itself: the knob keeps your value (and that
  * is what's saved), while a red marker and readout show what's actually in use.
  */
-export function bindPanel(display, { storageKey, knobs: overrides = {} }) {
+export function bindPanel(display, { storageKey, knobs: overrides = {}, ghostFade = 0.5 }) {
   const defs = {};
   for (const [name, def] of Object.entries(DISPLAY_KNOBS)) defs[name] = { ...def, ...overrides[name] };
   const knobProps = Object.values(defs).map((d) => d.prop);
 
-  const defaults = { color: display.color, refresh: display.refresh, autoPersist: false };
+  const defaults = { color: display.color, refresh: display.refresh, autoPersist: false, ghostFade: true };
   for (const p of knobProps) defaults[p] = display[p];
   const settings = { ...defaults };
 
@@ -74,6 +76,7 @@ export function bindPanel(display, { storageKey, knobs: overrides = {} }) {
   if (PHOSPHORS.includes(saved.color)) settings.color = saved.color;
   if (saved.refresh === 'beam' || saved.refresh === 'continuous') settings.refresh = saved.refresh;
   if (typeof saved.autoPersist === 'boolean') settings.autoPersist = saved.autoPersist;
+  if (typeof saved.ghostFade === 'boolean') settings.ghostFade = saved.ghostFade;
   for (const d of Object.values(defs)) {
     const v = saved[d.prop];
     if (typeof v === 'number' && Number.isFinite(v)) settings[d.prop] = clamp(v, d.min, d.max);
@@ -121,11 +124,16 @@ export function bindPanel(display, { storageKey, knobs: overrides = {} }) {
   // Refresh toggles.
   const redrawKey = document.querySelector('[data-toggle="redraw"]');
   const autoKey = document.querySelector('[data-toggle="autoPersist"]');
+  const ghostKey = document.querySelector('[data-toggle="ghostFade"]');
   const syncToggles = () => {
     display.refresh = settings.refresh;
     redrawKey?.setAttribute('aria-pressed', String(settings.refresh === 'beam'));
     autoKey?.setAttribute('aria-pressed', String(settings.autoPersist));
+    ghostKey?.setAttribute('aria-pressed', String(settings.ghostFade));
     if (autoKey) autoKey.disabled = settings.refresh !== 'beam';
+    // In continuous refresh, persistence already only governs leftovers, so a ghost fade
+    // would just override the knob; it's a fade & redraw option.
+    if (ghostKey) ghostKey.disabled = settings.refresh !== 'beam';
   };
   redrawKey?.addEventListener('click', () => {
     settings.refresh = settings.refresh === 'beam' ? 'continuous' : 'beam';
@@ -135,6 +143,12 @@ export function bindPanel(display, { storageKey, knobs: overrides = {} }) {
   });
   autoKey?.addEventListener('click', () => {
     settings.autoPersist = !settings.autoPersist;
+    syncToggles();
+    updatePersistence(0);
+    save();
+  });
+  ghostKey?.addEventListener('click', () => {
+    settings.ghostFade = !settings.ghostFade;
     syncToggles();
     updatePersistence(0);
     save();
@@ -155,6 +169,9 @@ export function bindPanel(display, { storageKey, knobs: overrides = {} }) {
       if (Math.abs(target - effective) < 1e-4) effective = target;
     } else effective = settings.persistence;
     display.persistence = effective;
+    // Leftovers fade at the ghost rate; lines still on screen keep the full persistence
+    // (no effect when persistence is already shorter than the ghost fade).
+    display.ghostFade = settings.refresh === 'beam' && settings.ghostFade ? Math.min(ghostFade, effective) : null;
     knobs.persistence?.setMarker(auto && effective > settings.persistence * 1.005 ? effective : null);
     if (cycleOut) {
       const text = settings.refresh === 'beam' ? DISPLAY_KNOBS.persistence.format(cycle) : 'free';

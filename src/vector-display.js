@@ -42,6 +42,7 @@ const DEFAULTS = {
   dwell: 0.8,
   order: 'queue',
   refresh: 'continuous',
+  ghostFade: null,
   glow: 1,
   maxPixelRatio: 2,
   autoStart: true,
@@ -52,6 +53,7 @@ const MIN_SIGMA_PX = 0.8;
 const FLASH_DECAY = 0.028; // seconds; the fast phosphor component that makes the beam head glint
 const BLANK_COST = 0.12; // blank moves run ~8x faster than writes
 const SCAN_ROW = 3; // in 'scan' order, shapes whose tops are this close count as one row
+const AT_REST = 0.08; // seconds a moved shape must sit still before 'beam' refresh repaints it first
 const SETTLE = 6; // fixed cost (in display units) to settle the beam at a stroke start
 const DOT_COST = 10; // time a dot stroke dwells, in display units
 const DOT_GAIN = 2.2;
@@ -426,6 +428,9 @@ export class VectorDisplay {
    *   flash         brief extra brightness at the beam head
    *   refresh       'continuous': drawn lines stay lit for free (default)
    *                 'beam': the beam must keep redrawing everything; lines fade between passes
+   *   ghostFade     seconds; when shorter than `persistence`, phosphor left behind by lines that
+   *                 are gone or have moved fades this fast, while lines still on the display
+   *                 list keep fading at `persistence` (null: everything uses `persistence`)
    *   order         'queue': trace shapes in the order they were added (default)
    *                 'scan':  always trace the top-most waiting shape next, left to right
    *                          within a row, like reading (good for UIs)
@@ -446,6 +451,7 @@ export class VectorDisplay {
     this.dwell = opts.dwell;
     this.order = opts.order;
     this.refresh = opts.refresh;
+    this.ghostFade = opts.ghostFade;
     this.glow = opts.glow;
     this.maxPixelRatio = opts.maxPixelRatio;
 
@@ -699,6 +705,9 @@ export class VectorDisplay {
     if (!this._glReady) return;
     const dpr = Math.min(window.devicePixelRatio || 1, this.maxPixelRatio);
     const rect = this.canvas.getBoundingClientRect();
+    // A canvas that's hidden or collapsed for a moment keeps its buffers; shrinking them to
+    // nothing and back would smear everything on the tube.
+    if ((rect.width < 2 || rect.height < 2) && this._phos) return;
     const w = Math.max(16, Math.round(rect.width * dpr));
     const h = Math.max(16, Math.round(rect.height * dpr));
     if (!force && w === this.canvas.width && h === this.canvas.height) return;
@@ -845,7 +854,8 @@ export class VectorDisplay {
    * beam took to come back round. A shape that moved since its last visit is dark where it
    * is now, so it gets a full deposit.
    */
-  _advanceBeam(dt, tau) {
+  _advanceBeam(dt, tau, tauBuf = tau) {
+    const repaint = this._settledDark();
     let left = dt;
     while (left > 1e-9) {
       const t0 = dt - left;
@@ -855,7 +865,7 @@ export class VectorDisplay {
         const speed = Math.max(1, s.speed ?? this.beamSpeed);
         const need = (s.total - s.progress) / speed;
         const end = Math.min(s.total, s.progress + left * speed);
-        this._sweep(s, s.progress, end, t0, t0 + Math.min(need, left), dt, tau, 1 + this.writeBoost, this.flash, this.dwell);
+        this._sweep(s, s.progress, end, t0, t0 + Math.min(need, left), dt, tauBuf, 1 + this.writeBoost, this.flash, this.dwell);
         s.progress = end;
         if (need <= left) {
           left -= need;
@@ -866,7 +876,7 @@ export class VectorDisplay {
         } else left = 0;
         continue;
       }
-      const s = this._nextRedraw();
+      const s = this._nextRedraw(repaint);
       if (!s) break;
       const speed = Math.max(1, s.speed ?? this.beamSpeed);
       const lit = s.litV === s._version && s.litX === s.offsetX && s.litY === s.offsetY;
@@ -874,7 +884,7 @@ export class VectorDisplay {
       const from = Math.min(this._redrawP, s.total);
       const need = (s.total - from) / speed;
       const end = Math.min(s.total, from + left * speed);
-      this._sweep(s, from, end, t0, t0 + Math.min(need, left), dt, tau, top, this.flash * top, this.dwell * top);
+      this._sweep(s, from, end, t0, t0 + Math.min(need, left), dt, tauBuf, top, this.flash * top, this.dwell * top);
       if (need <= left) {
         left -= need;
         this._markLit(s);
@@ -886,10 +896,44 @@ export class VectorDisplay {
     }
   }
 
-  /** Next shape to redraw, starting a new pass (at most one per frame) when one ends. */
-  _nextRedraw() {
+  /**
+   * Shapes that moved (scrolled, re-laid out) and have since come to rest are dark where they
+   * now sit. List them, in drawing order, so they're repainted before the regular pass
+   * carries on; anything still moving waits, so a scroll can't pin the beam to the top.
+   */
+  _settledDark() {
+    const list = [];
+    for (const s of this.shapes) {
+      if (s.state !== 'drawn') continue;
+      if (s.seenV !== s._version || s.seenX !== s.offsetX || s.seenY !== s.offsetY) {
+        s.seenV = s._version;
+        s.seenX = s.offsetX;
+        s.seenY = s.offsetY;
+        s.movedAt = this.time;
+        continue;
+      }
+      const lit = s.litV === s._version && s.litX === s.offsetX && s.litY === s.offsetY;
+      if (!lit && this.time - s.movedAt >= AT_REST) list.push(s);
+    }
+    return this.order === 'scan' ? scanSort(list) : list;
+  }
+
+  /**
+   * Next shape to redraw: finish the one in progress, then repaint shapes that moved, then
+   * continue the regular pass (starting a new one, at most once per frame, when it ends).
+   */
+  _nextRedraw(repaint = []) {
     const cur = this._redraw;
     if (cur?.state === 'drawn' && this._redrawP < cur.total) return cur;
+    while (repaint.length) {
+      const s = repaint.shift();
+      const lit = s.litV === s._version && s.litX === s.offsetX && s.litY === s.offsetY;
+      if (s.state === 'drawn' && !lit && s.total > 0) {
+        this._redraw = s;
+        this._redrawP = 0;
+        return s;
+      }
+    }
     for (;;) {
       while (this._passIndex < this._pass.length) {
         const s = this._pass[this._passIndex++];
@@ -905,6 +949,22 @@ export class VectorDisplay {
       if (this.order === 'scan') scanSort(this._pass);
       this._passIndex = 0;
       if (!this._pass.length) return null;
+    }
+  }
+
+  /**
+   * With a ghost fade the buffer decays faster than `persistence`. Lines still on the display
+   * list, where the beam last left them, get the difference back each frame so they fade at
+   * `persistence`; anything removed or moved gets nothing and fades at the ghost rate.
+   */
+  _holdLive(dt, tau, kBuf) {
+    const kLive = Math.exp(-dt / tau);
+    const start = this.time - dt;
+    for (const s of this.shapes) {
+      if (s.state !== 'drawn' || s.litAt == null) continue;
+      if (s.litV !== s._version || s.litX !== s.offsetX || s.litY !== s.offsetY) continue;
+      const brightness = Math.exp(-Math.max(0, start - s.litAt) / tau);
+      this._refresh(s, brightness * (kLive - kBuf));
     }
   }
 
@@ -1051,12 +1111,17 @@ export class VectorDisplay {
     this._focusNorm = this._sigma / sigmaPx(1);
 
     const tau = Math.max(this.persistence, 0.005);
-    const k = Math.exp(-dt / tau);
+    // The buffer itself decays at the ghost rate when that's faster; whatever is still on the
+    // display list is topped up to make up the difference, so only leftovers fade quickly.
+    const tauBuf = this.ghostFade > 0 ? Math.max(0.005, Math.min(tau, this.ghostFade)) : tau;
+    const k = Math.exp(-dt / tauBuf);
     this._count = 0;
     this._frameNo++;
-    if (this.refresh === 'beam') this._advanceBeam(dt, tau);
-    else {
-      this._advance(dt, tau);
+    if (this.refresh === 'beam') {
+      if (tauBuf < tau) this._holdLive(dt, tau, k);
+      this._advanceBeam(dt, tau, tauBuf);
+    } else {
+      this._advance(dt, tauBuf);
       for (const s of this.shapes) {
         if (s.state === 'queued') continue;
         this._refresh(s, 1 - k);

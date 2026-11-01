@@ -74,23 +74,25 @@
               <output class="knob__value"></output>
             </div>
           </div>
-          <p class="hint">Drag, scroll or arrow keys · double-click resets · saved in this browser</p>
+          <p class="hint">Drag, scroll or arrow keys · double-click resets</p>
         </section>
 
         <section class="group">
           <h2 class="group__title">Refresh</h2>
           <div class="toggles">
-            <button class="key key--toggle" data-toggle="redraw" aria-pressed="false" title="The beam has to keep redrawing everything itself; lines fade between passes">
-              <span class="lamp" aria-hidden="true"></span>Fade &amp; redraw
+            <button class="key key--toggle" data-toggle="redraw" aria-pressed="false" title="The beam has to keep redrawing everything itself; lines fade between passes. The readout is how long one redraw pass takes">
+              <span class="lamp" aria-hidden="true"></span>Fade &amp; redraw<output class="key__readout" data-readout="cycle" aria-label="Redraw cycle">free</output>
             </button>
             <button class="key key--toggle" data-toggle="autoPersist" aria-pressed="false" title="Keep persistence at least one redraw cycle long, so nothing fades out" disabled>
               <span class="lamp lamp--alert" aria-hidden="true"></span>Auto persist
             </button>
+            <button class="key key--toggle" data-toggle="ghostFade" aria-pressed="true" title="Let what won't be redrawn (old positions of scrolled lines, removed lines) fade in half a second while what's on screen keeps the full persistence. Matters when persistence is longer than that" disabled>
+              <span class="lamp lamp--alert" aria-hidden="true"></span>Fast ghost fade
+            </button>
           </div>
-          <p class="cycle"><span>Redraw cycle</span><output data-readout="cycle">free</output></p>
         </section>
 
-        <button class="key key--reset" data-action="reset-display" title="Restore this page's default phosphor, beam and refresh settings" disabled>
+        <button class="key key--reset" data-action="reset-display" title="Settings are saved in this browser. This restores the page's default phosphor, beam and refresh settings" disabled>
           <span class="lamp" aria-hidden="true"></span>Reset to defaults
         </button>
 
